@@ -131,7 +131,22 @@ A incerta foi uma marcação a lápis muito fraca, com a letra ainda visível. O
     - segunda maior também alta (> 0,6 · gap acima da mediana): **`*`** (duas marcadas);
     - caso contrário, a letra mais escura.
 
-### 3.5 Limitações conhecidas
+### 3.5 Teste do OpenCV.js no navegador (18/10)
+Página de teste em `app/` (seção 8.5): roda num Web Worker as etapas pesadas do algoritmo (remover vermelho, limiar adaptativo, contornos, filtro de círculos e normalização da iluminação), sem ainda decidir as respostas.
+
+| Aparelho | Carregar o OpenCV (1 vez) | 1ª folha | Folhas seguintes |
+|---|---|---|---|
+| PC, Chrome | 0,8 a 1,7 s | ~300 ms | ~170 ms |
+| iPhone, Safari 18.7 | 2,3 s | 479 ms | ~300 ms |
+
+**Conclusão:** o OpenCV.js 5.0 (`@techstark/opencv-js`, num worker de módulo) funciona no Safari do iPhone, com folga para a meta de < 2 s. A stack está mantida.
+
+Observações:
+- Na foto do iPhone, só 21 círculos foram detectados, num total de 12 mil contornos. A causa ainda está sendo investigada; a suspeita é foto de longe, com bolinhas de raio menor que 8 px.
+- O navegador acha um pouco mais de círculos que o Python na mesma foto (57 × 54), por causa do redimensionamento feito pelo canvas. Comparar com cuidado ao portar.
+- Falta testar no Chrome do Android.
+
+### 3.6 Limitações conhecidas
 - Testado em **só 2 fotos**, do mesmo modelo.
 - Ainda não testado:
   - questão em branco;
