@@ -3,5 +3,6 @@ dist/
 provas/
 dataset/fotos-reais/
 poc/*.png
+poc/saida/
 .env
 __pycache__/

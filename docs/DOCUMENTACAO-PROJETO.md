@@ -108,7 +108,7 @@ A incerta foi uma marcação a lápis muito fraca, com a letra ainda visível. O
 - **Corte fixo de escuridão** (pixel < 120). Falha com lápis e com sombra. Foi substituído pela normalização da iluminação.
 
 ### 3.4 Algoritmo atual (referência para portar para JavaScript)
-1. **Redimensionar** a foto para 1000 px de largura.
+1. **Redimensionar** para 1000 px de largura (folha inteira) ou 800 px (recorte do quadro-guia), com `INTER_AREA`.
 2. **Remover a tinta vermelha** (correção do professor) via HSV: vira branco.
 3. **Limiar adaptativo** (`adaptiveThreshold`, bloco 31, C = 8), seguido de **contornos**.
 4. **Filtrar círculos:**
@@ -123,8 +123,9 @@ A incerta foi uma marcação a lápis muito fraca, com a letra ainda visível. O
 7. **Colunas:** agrupar os x de todas as bolinhas e ficar com os 5 grupos vizinhos mais povoados (A a E).
 8. **Linhas:** índice da linha = posição y da cadeia dividida pelo espaçamento médio entre linhas.
 9. **Ajuste afim** (linha, coluna) → (x, y) por mínimos quadrados, descartando pontos fora do padrão. Isso **estima a posição de todas as bolinhas**, inclusive as não detectadas, e tolera rotação, escala e posição.
-10. **Escolher as N linhas consecutivas** com mais evidência, onde N é o número de questões do gabarito. Isso elimina as falsas detecções no texto acima da tabela.
-11. **Normalizar a iluminação:** cinza dividido por `medianBlur(cinza, 61)`.
+10. **Escolher as N linhas consecutivas** com mais evidência, onde N é o número de questões do gabarito. As candidatas incluem N linhas acima e abaixo das detectadas, porque a questão 1 ou a última podem não ter sido detectadas. A evidência de cada linha é o número de bolinhas detectadas nela mais a **pontuação de anel** (0 a 5): em cada posição prevista, o quanto há um círculo escuro (raio de 0,7 a 1,1) com papel claro em volta (1,4 raio), procurando numa vizinhança de até 0,3 raio porque a grade afim erra alguns pixels nas pontas quando há perspectiva.
+    - **Tabela cortada:** se alguma linha escolhida pontuar menos que **4,3**, a grade pode estar deslocada; **todas** as respostas viram `?` e o app pede para reenquadrar. Nas fotos de teste, as linhas da tabela tiraram 5,0 e as de fora no máximo 3,6.
+11. **Normalizar a iluminação:** cinza dividido pelo fundo, que é a `medianBlur` de 15 px numa cópia a 1/4 do tamanho (equivale à de 61 px na imagem inteira e é ~7x mais rápida). Feita antes do passo 10, que também a usa.
 12. **Medir o preenchimento:** escuridão média num disco de 0,6 raio em cada bolinha.
 13. **Decidir por linha:** `gap` = maior escuridão − mediana da linha.
     - `gap < 0,15`: **`?`** (em branco ou incerto);
@@ -149,12 +150,13 @@ Observações:
 **Quadro-guia na câmera (18/10).** Numa foto de prova tirada no iPhone, a leitura da foto inteira deslocou a grade em uma linha: a questão 1 não virou candidata e o texto abaixo da tabela entrou como linha 8. Para resolver, a câmera ao vivo mostra um quadro onde o professor encaixa a tabela. A altura do quadro acompanha o número de questões, e só o recorte dele, com 10% de margem, vai para a leitura.
 - Resultado no iPhone: **leitura correta**, com **117 a 161 ms por folha**, menos que com a foto inteira.
 - As proporções do quadro (linha = 8,5% da largura da tabela, cabeçalho = 1 linha) foram estimadas pelas fotos. É preciso recalibrar com o modelo oficial.
+- **Tolerância ao enquadramento (18/10).** Com a tabela um pouco acima ou abaixo do quadro, a questão 1 às vezes não era lida. Causas: a numeração das linhas começava na primeira linha detectada, então uma questão 1 não detectada nem entrava como candidata; e a altura aparente da tabela varia muito com o ângulo da câmera (a distância entre linhas foi de 0,59 a 0,90 da distância entre colunas nas duas fotos), então um quadro baixo cortava as últimas questões. Mudanças: pontuação de anel e regra da tabela cortada (passo 10), quadro mais alto (linha = 11% da largura) e recorte com 30% de folga vertical. Teste com recortes simulados, deslocando a tabela de −1,5 a +1,5 linha: **26/26 certos e nenhum erro silencioso** (antes: 14/26 e 13 respostas erradas sem aviso). Com quadros ou margens piores, a leitura falha, mas sempre com aviso.
 - A câmera fica ligada entre uma folha e outra, porque religar faz o Safari pedir permissão de novo.
 - **Android antigo (Galaxy A32, Chrome):** leitura correta, mas lento. O OpenCV levou 7,3 s para carregar, a 1ª folha 5,0 s (aquecimento) e as seguintes de 0,9 a 1,7 s. Otimizações feitas em seguida, medidas no PC: aquecimento automático depois de carregar; limites de cor do vermelho reaproveitados entre leituras; normalização da iluminação numa cópia a 1/4 do tamanho, com o mesmo resultado nas fotos de referência e diferença máxima de 0,006 no preenchimento. No PC, a leitura caiu de ~170 ms para ~100 ms, e a etapa de normalizar, de ~83 ms para ~11 ms. O `poc_bolhas.py` foi atualizado junto. **Medido de novo no A32: 105 a 126 ms por folha**, mais de 10x mais rápido, com a leitura correta. O ganho foi bem maior que no PC; a explicação provável é que as imagens grandes criadas e descartadas a cada leitura pesavam muito num celular com pouca memória.
 - **Em observação:** encaixar a tabela no quadro exige um pouco de cuidado. Não é difícil, mas pode cansar numa correção longa (150 provas). Ideias para a semana 3: quadro mais tolerante, captura automática quando a tabela estiver estável dentro do quadro e retorno visual de "encaixou".
 
 ### 3.6 Limitações conhecidas
-- Testado em **só 2 fotos**, do mesmo modelo.
+- Testado em **só 2 fotos** reais, do mesmo modelo, mais recortes simulados a partir delas. Os limites (0,15 do gap, 4,3 da pontuação de anel) precisam ser calibrados com o conjunto de fotos.
 - Ainda não testado:
   - questão em branco;
   - duas marcadas de propósito;
@@ -163,9 +165,9 @@ Observações:
   - foto muito inclinada ou em perspectiva forte;
   - tabela de 10 questões;
   - outros modelos de curso.
-- Velocidade no celular **não medida**.
+- Na foto 2 inteira, a questão 8 sai `C` no Python e `?` no app (gap de 0,13, perto do limite de 0,15): pequenas diferenças na decodificação da imagem mudam a grade em 1 ou 2 px. É um aviso, não um erro silencioso.
 - Marcação muito fraca a lápis fica no limite (`?`).
-- Se a tabela tiver uma linha a mais ou a menos que o gabarito, o resultado sai deslocado. O app precisa avisar quando a grade parecer inconsistente.
+- Se a tabela tiver uma linha a mais ou a menos que o gabarito, a regra da tabela cortada deve pegar parte dos casos, mas isso não foi testado.
 
 ---
 
@@ -271,7 +273,9 @@ ana_01.jpg,8,BABCDACC,iPhone 12,caneta azul; luz boa
 ana_02.jpg,8,A_BCD*CC,Moto G,lapis; sombra; Q2 em branco; Q6 dupla
 ```
 - `_` = questão em branco, `*` = duas marcadas de propósito.
-- O script `avaliar.py` compara o lido com o esperado e informa: % de acertos, % de incertas e **erros silenciosos**, que é a métrica mais importante.
+- **Anote as respostas reais da folha**, não as que o app leu.
+- Arquivos que começam com `recorte-` foram salvos pelo app com o botão "Salvar recorte" (só a tabela) e são lidos a 800 px; os demais são a folha inteira (1000 px). O recomendado é usar recortes, porque é o que o app lê de verdade.
+- `python poc/avaliar.py` compara o lido com o esperado e informa: % de acertos, % com aviso (`?`/`*`) e **erros silenciosos**, que é a métrica mais importante, separados por celular e por condição (cada item de `condicao` separado por `;`). Com `--depurar`, salva em `poc/saida/` a imagem das folhas com problema. Sai com código 1 se houver erro silencioso.
 
 ### 8.4 Criar o app
 ```bash
