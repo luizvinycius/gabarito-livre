@@ -1,10 +1,11 @@
 // Web Worker de módulo: carrega o OpenCV.js e roda o processamento fora da
 // thread da tela.
-// Por enquanto só executa as etapas pesadas do poc_bolhas.py para medir o
-// tempo no celular (seção 8.5 da documentação).
+// Porte do poc/poc_bolhas.py (seção 3.4 da documentação); os números nos
+// comentários são as etapas de lá.
 
 import * as opencv from '@techstark/opencv-js'
-import type { Mensagem, Resposta, Circulo } from './protocolo'
+import type { Mensagem, Resposta, Circulo, RespostaLida } from './protocolo'
+import { agruparLinhas, decidir } from './leitura'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CV = any
@@ -38,7 +39,7 @@ function versaoOpenCV(m: CV): string {
   }
 }
 
-function processar(largura: number, altura: number, pixels: ArrayBuffer) {
+function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuestoes: number) {
   if (!cv) throw new Error('OpenCV ainda não carregou')
   const tempos: Record<string, number> = {}
   let t = performance.now()
@@ -59,7 +60,6 @@ function processar(largura: number, altura: number, pixels: ArrayBuffer) {
   const contornos = new cv.MatVector()
   const hierarquia = new cv.Mat()
   const fundo = new cv.Mat()
-  const normalizada = new cv.Mat()
   const kernel = cv.Mat.ones(3, 3, cv.CV_8U)
   const limites: CV[] = []
   const faixa = (h: number, s: number, v: number) => {
@@ -110,25 +110,70 @@ function processar(largura: number, altura: number, pixels: ArrayBuffer) {
     }
     marcar('filtrar círculos')
 
+    // 5 a 10. estimar a grade
+    const grade = agruparLinhas(unicos, nQuestoes)
+    marcar('estimar grade')
+
     // 11. normalizar a iluminação (medianBlur grande é a etapa mais cara)
     cv.medianBlur(cinza, fundo, 61)
-    cv.divide(cinza, fundo, normalizada, 255)
     marcar('normalizar iluminação')
 
+    // 12 e 13. medir o preenchimento de cada bolinha e decidir cada linha
+    const respostas: RespostaLida[] = (grade?.linhas ?? []).map((linha) => {
+      const preenchimento = linha.map((c) => preenchimentoDisco(cinza.data, fundo.data, largura, altura, c))
+      return { letra: decidir(preenchimento), preenchimento }
+    })
+    marcar('ler respostas')
+
     const total = Object.values(tempos).reduce((a, b) => a + b, 0)
-    responder({ tipo: 'resultado', tempos, total, contornos: contornos.size(), circulos: unicos })
+    responder({
+      tipo: 'resultado',
+      tempos,
+      total,
+      contornos: contornos.size(),
+      circulos: unicos,
+      grade: grade?.linhas ?? null,
+      respostas,
+    })
   } finally {
-    for (const m of [rgba, rgb, hsv, cinza, verm1, verm2, binaria, contornos, hierarquia, fundo, normalizada, kernel, ...limites]) {
+    for (const m of [rgba, rgb, hsv, cinza, verm1, verm2, binaria, contornos, hierarquia, fundo, kernel, ...limites]) {
       m.delete()
     }
   }
+}
+
+// Escuridão média (0 a 1) num disco de 0,6 raio, com a iluminação normalizada
+// (cinza / fundo), como o fill_ratio do protótipo.
+function preenchimentoDisco(
+  cinza: Uint8Array,
+  fundo: Uint8Array,
+  largura: number,
+  altura: number,
+  { x, y, r }: Circulo,
+): number {
+  const cx = Math.trunc(x)
+  const cy = Math.trunc(y)
+  const raio = Math.max(2, Math.trunc(r * 0.6))
+  let soma = 0
+  let n = 0
+  for (let dy = -raio; dy <= raio; dy++) {
+    for (let dx = -raio; dx <= raio; dx++) {
+      const px = cx + dx
+      const py = cy + dy
+      if (dx * dx + dy * dy > raio * raio || px < 0 || py < 0 || px >= largura || py >= altura) continue
+      const i = py * largura + px
+      soma += Math.min(255, Math.trunc((cinza[i] / (fundo[i] + 1)) * 255))
+      n++
+    }
+  }
+  return n ? (255 - soma / n) / 255 : 0
 }
 
 escopo.onmessage = async (e: MessageEvent<Mensagem>) => {
   try {
     const msg = e.data
     if (msg.tipo === 'carregar') await carregar()
-    else processar(msg.largura, msg.altura, msg.pixels)
+    else processar(msg.largura, msg.altura, msg.pixels, msg.nQuestoes)
   } catch (err) {
     responder({ tipo: 'erro', mensagem: err instanceof Error ? err.message : String(err) })
   }

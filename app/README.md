@@ -1,6 +1,6 @@
 # App (React + Vite + TypeScript)
 
-Por enquanto contém só a **página de teste do OpenCV.js** (seção 8.5 da documentação): carrega uma foto, roda as etapas pesadas da leitura num Web Worker e mostra o tempo de cada uma.
+Por enquanto contém só a **página de teste da leitura** (seção 8.5 da documentação): carrega uma foto, roda o algoritmo completo do `poc_bolhas.py` num Web Worker e mostra as respostas lidas e o tempo de cada etapa.
 
 ```bash
 npm install

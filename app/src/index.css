@@ -100,3 +100,49 @@ canvas {
   width: 100%;
   border-radius: 12px;
 }
+
+.campo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 1.05rem;
+}
+
+.campo input {
+  width: 5rem;
+  padding: 8px;
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+.respostas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.respostas li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  border-radius: 8px;
+  background: #e3f2fd;
+}
+
+.respostas li span {
+  font-size: 0.8rem;
+  color: #555;
+}
+
+.respostas li strong {
+  font-size: 1.5rem;
+}
+
+.respostas li.duvida {
+  background: #ffebee;
+  color: #c62828;
+}

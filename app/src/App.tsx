@@ -1,11 +1,15 @@
-// Página de teste do OpenCV.js no celular (seção 8.5 da documentação).
-// Carrega uma foto, roda as etapas pesadas da leitura num Web Worker e mostra
-// quanto tempo cada uma levou.
+// Página de teste da leitura no celular (seção 8.5 da documentação).
+// Carrega uma foto, roda o algoritmo de leitura num Web Worker e mostra as
+// respostas lidas e quanto tempo cada etapa levou.
 
 import { useEffect, useRef, useState } from 'react'
-import type { Circulo, Mensagem, Resposta } from './omr/protocolo'
+import type { Circulo, Mensagem, Resposta, RespostaLida } from './omr/protocolo'
 
 const LARGURA_ALVO = 1000
+
+function textoRespostas(respostas: RespostaLida[]) {
+  return respostas.length ? respostas.map((r) => r.letra).join('') : '(tabela não encontrada)'
+}
 
 type Medicao = {
   preparo: number
@@ -14,22 +18,42 @@ type Medicao = {
   ida_e_volta: number
   contornos: number
   circulos: Circulo[]
+  respostas: RespostaLida[]
 }
 
 function ms(n: number) {
   return `${Math.round(n)} ms`
 }
 
-function desenharCirculos(c: HTMLCanvasElement | null, circulos: Circulo[]) {
+// Círculos detectados em cinza fino; a grade estimada em laranja, com a
+// bolinha escolhida em verde e a letra lida à esquerda de cada linha.
+function desenharLeitura(
+  c: HTMLCanvasElement | null,
+  circulos: Circulo[],
+  grade: Circulo[][] | null,
+  respostas: RespostaLida[],
+) {
   const ctx = c?.getContext('2d')
   if (!ctx) return
-  ctx.strokeStyle = '#00c853'
-  ctx.lineWidth = 3
-  for (const { x, y, r } of circulos) {
+  const circulo = ({ x, y, r }: Circulo, cor: string, espessura: number) => {
+    ctx.strokeStyle = cor
+    ctx.lineWidth = espessura
     ctx.beginPath()
     ctx.arc(x, y, r, 0, 2 * Math.PI)
     ctx.stroke()
   }
+  for (const d of circulos) circulo(d, '#9e9e9e', 1)
+  grade?.forEach((linha, i) => {
+    const { letra } = respostas[i]
+    linha.forEach((b, k) => {
+      const escolhida = 'ABCDE'[k] === letra
+      circulo({ ...b, r: b.r + 4 }, escolhida ? '#00c853' : '#ff9800', escolhida ? 4 : 2)
+    })
+    const r = linha[0].r
+    ctx.font = `bold ${Math.round(r * 1.6)}px system-ui, sans-serif`
+    ctx.fillStyle = letra === '?' || letra === '*' ? '#d50000' : '#1565c0'
+    ctx.fillText(`${i + 1}:${letra}`, linha[0].x - 7 * r, linha[0].y + r / 2)
+  })
 }
 
 export default function App() {
@@ -42,6 +66,7 @@ export default function App() {
   const [ocupado, setOcupado] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [medicoes, setMedicoes] = useState<Medicao[]>([])
+  const [nQuestoes, setNQuestoes] = useState(8)
 
   useEffect(() => {
     const inicio = performance.now()
@@ -61,9 +86,10 @@ export default function App() {
           ida_e_volta: performance.now() - inicioEnvio.current,
           contornos: r.contornos,
           circulos: r.circulos,
+          respostas: r.respostas,
         }
         setMedicoes((anteriores) => [...anteriores, m])
-        desenharCirculos(canvas.current, r.circulos)
+        desenharLeitura(canvas.current, r.circulos, r.grade, r.respostas)
         setOcupado(false)
       }
     }
@@ -80,6 +106,7 @@ export default function App() {
     c.width = LARGURA_ALVO
     c.height = Math.round(foto.height * escala)
     const ctx = c.getContext('2d', { willReadFrequently: true })!
+    ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(foto, 0, 0, c.width, c.height)
     return ctx.getImageData(0, 0, c.width, c.height)
   }
@@ -94,7 +121,7 @@ export default function App() {
     inicioEnvio.current = performance.now()
     const pixels = dados.data.buffer
     worker.current.postMessage(
-      { tipo: 'processar', largura: dados.width, altura: dados.height, pixels } satisfies Mensagem,
+      { tipo: 'processar', largura: dados.width, altura: dados.height, pixels, nQuestoes } satisfies Mensagem,
       [pixels],
     )
   }
@@ -111,6 +138,7 @@ export default function App() {
     }
   }
 
+  const ultima = medicoes.at(-1)
   const relatorio = [
     `Navegador: ${navigator.userAgent}`,
     carga ? `OpenCV ${carga.versao} carregou em ${ms(carga.ms)}` : 'OpenCV não carregou',
@@ -120,11 +148,12 @@ export default function App() {
         `(preparo ${ms(m.preparo)}, worker ${ms(m.total)}), ` +
         `${m.circulos.length} círculos em ${m.contornos} contornos`,
     ),
+    ...(ultima ? [`Respostas lidas: ${textoRespostas(ultima.respostas)}`] : []),
   ].join('\n')
 
   return (
     <main>
-      <h1>Teste do OpenCV.js</h1>
+      <h1>Teste da leitura</h1>
 
       <section className="cartao">
         {erro && <p className="erro">{erro}</p>}
@@ -135,6 +164,18 @@ export default function App() {
         ) : (
           !erro && <p>⏳ Carregando o OpenCV (cerca de 13 MB)…</p>
         )}
+
+        <label className="campo">
+          Número de questões
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={30}
+            value={nQuestoes}
+            onChange={(e) => setNQuestoes(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}
+          />
+        </label>
 
         <label className={`botao ${!carga || ocupado ? 'desativado' : ''}`}>
           📷 Escolher ou tirar foto
@@ -152,6 +193,27 @@ export default function App() {
         )}
         {ocupado && <p>⏳ Processando…</p>}
       </section>
+
+      {ultima && (
+        <section className="cartao">
+          <h2>Respostas lidas</h2>
+          {ultima.respostas.length === 0 ? (
+            <p className="erro">Não encontrei a tabela de respostas nesta foto.</p>
+          ) : (
+            <ol className="respostas">
+              {ultima.respostas.map((r, i) => (
+                <li key={i} className={r.letra === '?' || r.letra === '*' ? 'duvida' : ''}>
+                  <span>{i + 1}</span>
+                  <strong>{r.letra}</strong>
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="dica">
+            <strong>?</strong> = em branco ou incerta · <strong>*</strong> = duas marcadas
+          </p>
+        </section>
+      )}
 
       {medicoes.length > 0 && (
         <section className="cartao">
