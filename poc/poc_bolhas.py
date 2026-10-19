@@ -136,8 +136,12 @@ def read_sheet(path, dbg_path, n_q):
     img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
     gray = student_ink_gray(img)
     rows, rmed = group_rows(find_circles(gray), n_q)
-    # remove sombra/iluminação desigual: escuro relativo ao papel em volta
-    bg = cv2.medianBlur(gray, 61).astype(float) + 1
+    # remove sombra/iluminação desigual: escuro relativo ao papel em volta.
+    # A mediana larga (61 px) roda numa cópia a 1/4 do tamanho (15 px), que
+    # dá quase o mesmo fundo e é ~7x mais rápida.
+    h, w = gray.shape
+    small = cv2.resize(gray, (w // 4, h // 4), interpolation=cv2.INTER_AREA)
+    bg = cv2.resize(cv2.medianBlur(small, 15), (w, h), interpolation=cv2.INTER_LINEAR).astype(float) + 1
     norm = np.clip(gray / bg * 255, 0, 255).astype(np.uint8)
     dbg = img.copy()
     result = []

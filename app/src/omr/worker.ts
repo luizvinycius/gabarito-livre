@@ -27,7 +27,31 @@ async function carregar() {
   let m: CV = (opencv as CV).default ?? opencv
   if (m instanceof Promise) m = await m
   cv = m
+  // Aquecimento: a primeira execução de cada função do OpenCV é bem mais
+  // lenta (o navegador ainda está compilando). Roda uma leitura numa folha
+  // em branco para a primeira folha de verdade já sair rápida.
+  const largura = 800
+  const altura = 700
+  processar(largura, altura, new Uint8Array(largura * altura * 4).fill(255).buffer, 8)
   responder({ tipo: 'pronto', versao: versaoOpenCV(m) })
+}
+
+// Limites de cor do inRange: são do tamanho da imagem, então são criados
+// uma vez para cada tamanho e reaproveitados entre as leituras.
+let limitesVermelho: { largura: number; altura: number; mats: CV[] } | null = null
+
+function limitesDoVermelho(largura: number, altura: number): CV[] {
+  if (limitesVermelho?.largura !== largura || limitesVermelho.altura !== altura) {
+    limitesVermelho?.mats.forEach((m) => m.delete())
+    const faixa = (h: number, s: number, v: number) =>
+      new cv.Mat(altura, largura, cv.CV_8UC3, new cv.Scalar(h, s, v))
+    limitesVermelho = {
+      largura,
+      altura,
+      mats: [faixa(0, 60, 40), faixa(12, 255, 255), faixa(155, 60, 40), faixa(180, 255, 255)],
+    }
+  }
+  return limitesVermelho.mats
 }
 
 function versaoOpenCV(m: CV): string {
@@ -39,7 +63,7 @@ function versaoOpenCV(m: CV): string {
   }
 }
 
-function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuestoes: number) {
+function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuestoes: number): Resposta {
   if (!cv) throw new Error('OpenCV ainda não carregou')
   const tempos: Record<string, number> = {}
   let t = performance.now()
@@ -60,20 +84,16 @@ function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuesto
   const contornos = new cv.MatVector()
   const hierarquia = new cv.Mat()
   const fundo = new cv.Mat()
+  const pequena = new cv.Mat()
   const kernel = cv.Mat.ones(3, 3, cv.CV_8U)
-  const limites: CV[] = []
-  const faixa = (h: number, s: number, v: number) => {
-    const m = new cv.Mat(altura, largura, cv.CV_8UC3, new cv.Scalar(h, s, v))
-    limites.push(m)
-    return m
-  }
 
   try {
     // 2. tinta vermelha do professor vira branco
+    const [baixo1, alto1, baixo2, alto2] = limitesDoVermelho(largura, altura)
     cv.cvtColor(rgba, rgb, cv.COLOR_RGBA2RGB)
     cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV)
-    cv.inRange(hsv, faixa(0, 60, 40), faixa(12, 255, 255), verm1)
-    cv.inRange(hsv, faixa(155, 60, 40), faixa(180, 255, 255), verm2)
+    cv.inRange(hsv, baixo1, alto1, verm1)
+    cv.inRange(hsv, baixo2, alto2, verm2)
     cv.bitwise_or(verm1, verm2, verm1)
     cv.dilate(verm1, verm1, kernel)
     cv.cvtColor(rgba, cinza, cv.COLOR_RGBA2GRAY)
@@ -114,8 +134,11 @@ function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuesto
     const grade = agruparLinhas(unicos, nQuestoes)
     marcar('estimar grade')
 
-    // 11. normalizar a iluminação (medianBlur grande é a etapa mais cara)
-    cv.medianBlur(cinza, fundo, 61)
+    // 11. normalizar a iluminação: a mediana larga (61 px) roda numa cópia a
+    // 1/4 do tamanho (15 px), que dá quase o mesmo fundo e é ~7x mais rápida
+    cv.resize(cinza, pequena, new cv.Size(Math.trunc(largura / 4), Math.trunc(altura / 4)), 0, 0, cv.INTER_AREA)
+    cv.medianBlur(pequena, pequena, 15)
+    cv.resize(pequena, fundo, new cv.Size(largura, altura), 0, 0, cv.INTER_LINEAR)
     marcar('normalizar iluminação')
 
     // 12 e 13. medir o preenchimento de cada bolinha e decidir cada linha
@@ -126,7 +149,7 @@ function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuesto
     marcar('ler respostas')
 
     const total = Object.values(tempos).reduce((a, b) => a + b, 0)
-    responder({
+    return {
       tipo: 'resultado',
       tempos,
       total,
@@ -134,9 +157,9 @@ function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuesto
       circulos: unicos,
       grade: grade?.linhas ?? null,
       respostas,
-    })
+    }
   } finally {
-    for (const m of [rgba, rgb, hsv, cinza, verm1, verm2, binaria, contornos, hierarquia, fundo, kernel, ...limites]) {
+    for (const m of [rgba, rgb, hsv, cinza, verm1, verm2, binaria, contornos, hierarquia, fundo, pequena, kernel]) {
       m.delete()
     }
   }
@@ -173,7 +196,7 @@ escopo.onmessage = async (e: MessageEvent<Mensagem>) => {
   try {
     const msg = e.data
     if (msg.tipo === 'carregar') await carregar()
-    else processar(msg.largura, msg.altura, msg.pixels, msg.nQuestoes)
+    else responder(processar(msg.largura, msg.altura, msg.pixels, msg.nQuestoes))
   } catch (err) {
     responder({ tipo: 'erro', mensagem: err instanceof Error ? err.message : String(err) })
   }
