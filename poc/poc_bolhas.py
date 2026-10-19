@@ -6,6 +6,12 @@ import cv2
 import numpy as np
 
 TARGET_W = 1000
+# Pontuação mínima de anel (0 a 5) de cada linha escolhida. Nas fotos de
+# teste, todas as linhas da tabela tiraram 5,0 e as de fora no máximo 3,6.
+# Se alguma linha ficar abaixo do mínimo, a tabela provavelmente está cortada
+# e a grade pode estar deslocada: todas as respostas viram "?".
+# TODO: recalibrar com o conjunto de fotos (avaliar.py).
+MIN_RING = 4.3
 
 
 def student_ink_gray(img):
@@ -40,9 +46,37 @@ def find_circles(gray):
     return keep
 
 
-def group_rows(circles, n_q):
+def ring_score(norm, x, y, r):
+    """0 a 1: quanto (x, y, r) parece uma bolinha impressa, isto é, um anel
+    escuro com papel claro em volta. None se cair fora da imagem.
+    Procura o anel numa vizinhança pequena (até 0,3 raio de deslocamento),
+    porque a grade afim erra alguns pixels nas pontas quando há perspectiva.
+    (Usar esse centro ajustado para medir o preenchimento foi testado e
+    piorou: numa bolinha pintada o melhor anel nem sempre fica no centro.)"""
+    h, w = norm.shape
+    if not (1.8 * r <= x < w - 1.8 * r and 1.8 * r <= y < h - 1.8 * r):
+        return None
+    ang = np.linspace(0, 2 * np.pi, 24, endpoint=False)
+    cos, sin = np.cos(ang), np.sin(ang)
+
+    def dark(cx, cy, f):
+        xs = (cx + f * r * cos).astype(int)
+        ys = (cy + f * r * sin).astype(int)
+        return (255 - norm[ys, xs].astype(float)) / 255
+
+    best = 0.0
+    for dx in (-0.3, 0, 0.3):
+        for dy in (-0.3, 0, 0.3):
+            cx, cy = x + dx * r, y + dy * r
+            ring = np.max([dark(cx, cy, f) for f in (0.7, 0.8, 0.9, 1.0, 1.1)], axis=0).mean()
+            best = max(best, ring - dark(cx, cy, 1.4).mean())
+    return float(np.clip(best / 0.3, 0, 1))
+
+
+def group_rows(circles, n_q, norm):
     """Estima a grade (linhas x 5 colunas) a partir das bolinhas detectadas,
-    mesmo que algumas faltem, e devolve as posições de TODAS as bolinhas."""
+    mesmo que algumas faltem, e devolve as posições de TODAS as bolinhas,
+    junto com a pontuação de anel de cada linha (0 a 5)."""
     rmed = np.median([c[2] for c in circles])
     circles = [c for c in circles if 0.75 * rmed < c[2] < 1.3 * rmed]
     rmed = np.median([c[2] for c in circles])
@@ -72,7 +106,7 @@ def group_rows(circles, n_q):
         groups.setdefault(find(i), []).append(circles[i])
     chains = [g for g in groups.values() if len(g) >= 3]
     if not chains:
-        return [], rmed
+        return [], [], rmed
     sp = np.percentile(gaps, 30)  # espaçamento entre colunas (vizinhos diretos)
 
     # colunas: agrupa os x de todas as bolinhas; fica com as 5 colunas mais povoadas e vizinhas
@@ -113,14 +147,38 @@ def group_rows(circles, n_q):
         if keep.all():
             break
         obs = obs[keep]
-    # o professor já informou quantas questões há: escolhe as n_q linhas seguidas com mais evidência
-    counts = np.bincount(obs[:, 0].astype(int), minlength=n_q)
-    s0 = max(range(len(counts) - n_q + 1), key=lambda k: counts[k:k + n_q].sum())
-    block = range(s0, s0 + n_q)
-    rows = []
-    for ri in block:
-        rows.append([(cx @ [1, ci, ri], cy @ [1, ci, ri], rmed) for ci in range(5)])
-    return rows, rmed
+    # o professor já informou quantas questões há: escolhe as n_q linhas
+    # seguidas com mais evidência. A evidência de cada linha é o número de
+    # bolinhas detectadas nela mais a pontuação de anel nas 5 posições
+    # previstas. Testa também linhas acima e abaixo das detectadas, porque a
+    # questão 1 (ou a última) pode não ter sido detectada.
+    det = np.bincount(obs[:, 0].astype(int) - int(obs[:, 0].min()))
+    r_min = int(obs[:, 0].min())
+    cand = {}
+    for ri in range(r_min - n_q, int(obs[:, 0].max()) + n_q + 1):
+        pos = [(cx @ [1, ci, ri], cy @ [1, ci, ri]) for ci in range(5)]
+        sc = [ring_score(norm, x, y, rmed) for x, y in pos]
+        if None in sc:
+            continue  # linha fora da imagem
+        k = ri - r_min
+        cand[ri] = (pos, sum(sc), det[k] if 0 <= k < len(det) else 0)
+    blocks = [k for k in cand if all(k + j in cand for j in range(n_q))]
+    if not blocks:
+        return [], [], rmed
+    s0 = max(blocks, key=lambda k: sum(cand[k + j][1] + cand[k + j][2] for j in range(n_q)))
+    rows = [[(x, y, rmed) for x, y in cand[ri][0]] for ri in range(s0, s0 + n_q)]
+    rings = [cand[ri][1] for ri in range(s0, s0 + n_q)]
+    return rows, rings, rmed
+
+
+def normalize_light(gray):
+    """Remove sombra/iluminação desigual: escuro relativo ao papel em volta.
+    A mediana larga (61 px) roda numa cópia a 1/4 do tamanho (15 px), que dá
+    quase o mesmo fundo e é ~7x mais rápida."""
+    h, w = gray.shape
+    small = cv2.resize(gray, (w // 4, h // 4), interpolation=cv2.INTER_AREA)
+    bg = cv2.resize(cv2.medianBlur(small, 15), (w, h), interpolation=cv2.INTER_LINEAR).astype(float) + 1
+    return np.clip(gray / bg * 255, 0, 255).astype(np.uint8)
 
 
 def fill_ratio(gray, x, y, r):
@@ -130,19 +188,21 @@ def fill_ratio(gray, x, y, r):
     return float(255 - np.mean(vals)) / 255
 
 
-def read_sheet(path, dbg_path, n_q):
-    img = cv2.imread(path)
-    s = TARGET_W / img.shape[1]
+def read_sheet(path, dbg_path, n_q, target_w=TARGET_W):
+    result, dbg = read_image(cv2.imread(path), n_q, target_w)
+    cv2.imwrite(dbg_path, dbg)
+    return result
+
+
+def read_image(img, n_q, target_w=TARGET_W):
+    """Lê uma imagem já carregada. Devolve (respostas, imagem de depuração).
+    target_w: 1000 para a folha inteira, 800 para o recorte do quadro-guia."""
+    s = target_w / img.shape[1]
     img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
     gray = student_ink_gray(img)
-    rows, rmed = group_rows(find_circles(gray), n_q)
-    # remove sombra/iluminação desigual: escuro relativo ao papel em volta.
-    # A mediana larga (61 px) roda numa cópia a 1/4 do tamanho (15 px), que
-    # dá quase o mesmo fundo e é ~7x mais rápida.
-    h, w = gray.shape
-    small = cv2.resize(gray, (w // 4, h // 4), interpolation=cv2.INTER_AREA)
-    bg = cv2.resize(cv2.medianBlur(small, 15), (w, h), interpolation=cv2.INTER_LINEAR).astype(float) + 1
-    norm = np.clip(gray / bg * 255, 0, 255).astype(np.uint8)
+    norm = normalize_light(gray)
+    rows, rings, rmed = group_rows(find_circles(gray), n_q, norm)
+    suspect = any(v < MIN_RING for v in rings)
     dbg = img.copy()
     result = []
     for qi, row in enumerate(rows, 1):
@@ -150,7 +210,9 @@ def read_sheet(path, dbg_path, n_q):
         order = f.argsort()[::-1]
         top, second, base = f[order[0]], f[order[1]], np.median(f)
         gap = top - base
-        if gap < 0.15:
+        if suspect:
+            ans = "?"          # tabela cortada ou grade deslocada: reenquadrar
+        elif gap < 0.15:
             ans = "?"          # em branco ou incerto: professor confirma
         elif second - base > 0.6 * gap:
             ans = "*"          # duas marcadas
@@ -162,8 +224,7 @@ def read_sheet(path, dbg_path, n_q):
             cv2.circle(dbg, (int(x), int(y)), int(r) + 4, (0, 200, 0) if on else (255, 120, 0), 3 if on else 1)
         cv2.putText(dbg, f"{qi}:{ans}", (int(row[0][0] - 9 * rmed), int(row[0][1] + rmed / 2)),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-    cv2.imwrite(dbg_path, dbg)
-    return result
+    return result, dbg
 
 
 if __name__ == "__main__":

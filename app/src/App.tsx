@@ -25,6 +25,17 @@ type Medicao = {
   contornos: number
   circulos: Circulo[]
   respostas: RespostaLida[]
+  tabelaCortada: boolean
+  aneis: number[]
+}
+
+// Nome do arquivo do recorte salvo para o conjunto de teste (dataset/).
+function nomeRecorte(nQuestoes: number) {
+  const agora = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  const data = `${agora.getFullYear()}${p(agora.getMonth() + 1)}${p(agora.getDate())}`
+  const hora = `${p(agora.getHours())}${p(agora.getMinutes())}${p(agora.getSeconds())}`
+  return `recorte-${nQuestoes}q-${data}-${hora}.jpg`
 }
 
 function ms(n: number) {
@@ -75,6 +86,9 @@ export default function App() {
   const [nQuestoes, setNQuestoes] = useState(8)
   // A câmera fica ligada (só escondida) entre uma folha e outra: religar
   // a câmera faz o Safari pedir permissão de novo.
+  // Recorte da última captura já em JPEG: o compartilhamento no iPhone só
+  // funciona se for chamado direto no toque, sem esperar a conversão.
+  const [arquivoRecorte, setArquivoRecorte] = useState<File | null>(null)
   const [camera, setCamera] = useState<'desligada' | 'visivel' | 'escondida'>('desligada')
 
   useEffect(() => {
@@ -96,6 +110,8 @@ export default function App() {
           contornos: r.contornos,
           circulos: r.circulos,
           respostas: r.respostas,
+          tabelaCortada: r.tabelaCortada,
+          aneis: r.aneis,
         }
         setMedicoes((anteriores) => [...anteriores, m])
         desenharLeitura(canvas.current, r.circulos, r.grade, r.respostas)
@@ -107,30 +123,48 @@ export default function App() {
     return () => w.terminate()
   }, [])
 
-  function desenharFoto(): ImageData | null {
+  // Desenha a foto na tela, no tamanho da leitura, e devolve os pixels para o
+  // worker com até o dobro desse tamanho: a redução final é feita lá, com o
+  // INTER_AREA do OpenCV, para dar o mesmo resultado do protótipo em Python.
+  function desenharFoto(): { dados: ImageData; largura: number } | null {
     const c = canvas.current
     if (!imagem.current || !c) return null
     const { fonte: foto, largura } = imagem.current
-    const escala = largura / foto.width
     c.width = largura
-    c.height = Math.round(foto.height * escala)
-    const ctx = c.getContext('2d', { willReadFrequently: true })!
+    c.height = Math.round((foto.height * largura) / foto.width)
+    const ctx = c.getContext('2d')!
     ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(foto, 0, 0, c.width, c.height)
-    return ctx.getImageData(0, 0, c.width, c.height)
+
+    const fator = Math.min(1, (2 * largura) / foto.width)
+    const envio = document.createElement('canvas')
+    envio.width = Math.round(foto.width * fator)
+    envio.height = Math.round(foto.height * fator)
+    const ctxEnvio = envio.getContext('2d', { willReadFrequently: true })!
+    ctxEnvio.imageSmoothingQuality = 'high'
+    ctxEnvio.drawImage(foto, 0, 0, envio.width, envio.height)
+    return { dados: ctxEnvio.getImageData(0, 0, envio.width, envio.height), largura }
   }
 
   function rodar() {
     const t0 = performance.now()
-    const dados = desenharFoto()
-    if (!dados || !worker.current) return
+    const foto = desenharFoto()
+    if (!foto || !worker.current) return
+    const { dados, largura } = foto
     preparo.current = performance.now() - t0
     setErro(null)
     setOcupado(true)
     inicioEnvio.current = performance.now()
     const pixels = dados.data.buffer
     worker.current.postMessage(
-      { tipo: 'processar', largura: dados.width, altura: dados.height, pixels, nQuestoes } satisfies Mensagem,
+      {
+        tipo: 'processar',
+        largura: dados.width,
+        altura: dados.height,
+        pixels,
+        nQuestoes,
+        larguraAlvo: largura,
+      } satisfies Mensagem,
       [pixels],
     )
   }
@@ -139,14 +173,41 @@ export default function App() {
     const anterior = imagem.current?.fonte
     if (anterior instanceof ImageBitmap) anterior.close()
     imagem.current = nova
+    setArquivoRecorte(null)
     setMedicoes([])
     rodar()
+  }
+
+  // No celular, compartilhar abre a folha do sistema (no iPhone dá para
+  // "Salvar imagem"); no computador, ou onde não houver, baixa o arquivo.
+  async function salvarRecorte() {
+    if (!arquivoRecorte) return
+    const celular = matchMedia('(pointer: coarse)').matches
+    if (celular && navigator.canShare?.({ files: [arquivoRecorte] })) {
+      try {
+        await navigator.share({ files: [arquivoRecorte] })
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === 'AbortError')) {
+          setErro(`Não consegui salvar: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+      return
+    }
+    const url = URL.createObjectURL(arquivoRecorte)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = arquivoRecorte.name
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
   }
 
   async function escolherFoto(arquivo: File | undefined) {
     if (!arquivo) return
     try {
-      usarImagem({ fonte: await createImageBitmap(arquivo), largura: LARGURA_FOLHA })
+      // Recortes salvos pelo próprio app (conjunto de teste) são lidos como
+      // recorte, e não como folha inteira. O avaliar.py usa a mesma regra.
+      const largura = arquivo.name.startsWith('recorte-') ? LARGURA_RECORTE : LARGURA_FOLHA
+      usarImagem({ fonte: await createImageBitmap(arquivo), largura })
     } catch (err) {
       setErro(`Não consegui abrir a foto: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -163,6 +224,13 @@ export default function App() {
         `${m.circulos.length} círculos em ${m.contornos} contornos`,
     ),
     ...(ultima ? [`Respostas lidas: ${textoRespostas(ultima.respostas)}`] : []),
+    ...(ultima?.tabelaCortada ? ['Aviso: tabela cortada'] : []),
+    ...(ultima ? [`Anéis por linha: ${ultima.aneis.map((a) => a.toFixed(1)).join(' ')}`] : []),
+    ...(ultima?.respostas ?? []).flatMap((r, i) =>
+      r.letra === '?' || r.letra === '*'
+        ? [`Dúvida Q${i + 1}: ${r.preenchimento.map((p) => p.toFixed(2)).join(' ')}`]
+        : [],
+    ),
   ].join('\n')
 
   return (
@@ -178,6 +246,12 @@ export default function App() {
             onCapturar={(recorte) => {
               setCamera('escondida')
               usarImagem({ fonte: recorte, largura: LARGURA_RECORTE })
+              const nome = nomeRecorte(nQuestoes)
+              recorte.toBlob(
+                (blob) => blob && setArquivoRecorte(new File([blob], nome, { type: 'image/jpeg' })),
+                'image/jpeg',
+                0.92,
+              )
             }}
           />
         </section>
@@ -233,9 +307,16 @@ export default function App() {
       {ultima && (
         <section className="cartao">
           <h2>Respostas lidas</h2>
-          {ultima.respostas.length === 0 ? (
+          {ultima.respostas.length === 0 && (
             <p className="erro">Não encontrei a tabela de respostas nesta foto.</p>
-          ) : (
+          )}
+          {ultima.tabelaCortada && (
+            <p className="erro">
+              A tabela parece estar cortada ou fora do quadro. Afaste um pouco o celular e tente de
+              novo.
+            </p>
+          )}
+          {ultima.respostas.length > 0 && (
             <ol className="respostas">
               {ultima.respostas.map((r, i) => (
                 <li key={i} className={r.letra === '?' || r.letra === '*' ? 'duvida' : ''}>
@@ -248,6 +329,17 @@ export default function App() {
           <p className="dica">
             <strong>?</strong> = em branco ou incerta · <strong>*</strong> = duas marcadas
           </p>
+          {arquivoRecorte && (
+            <>
+              <button className="botao secundario" onClick={salvarRecorte}>
+                💾 Salvar recorte para o conjunto de teste
+              </button>
+              <p className="dica">
+                Arquivo: <code>{arquivoRecorte.name}</code>. Anote as respostas <strong>reais</strong>{' '}
+                da folha no <code>dataset/respostas.csv</code>, não as lidas pelo app.
+              </p>
+            </>
+          )}
         </section>
       )}
 

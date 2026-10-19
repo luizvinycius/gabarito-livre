@@ -1,21 +1,26 @@
 // Câmera ao vivo com um quadro-guia onde o professor encaixa a tabela de
 // respostas. A altura do quadro acompanha o número de questões. Na captura,
-// devolve só o recorte do quadro (com uma margem), para a leitura não ser
-// confundida pelo cabeçalho ou pelo texto em volta da tabela.
+// devolve só o recorte do quadro (com uma margem), para a leitura ter menos
+// texto em volta da tabela e as bolinhas ficarem num tamanho previsível.
+// O quadro é só um guia: a leitura acha a tabela dentro do recorte.
 
 import { useEffect, useRef, useState } from 'react'
 
-// Proporções aproximadas da tabela da Univag, medidas nas fotos de teste:
-// cada linha tem de 7,5% a 9% da largura da tabela, e o cabeçalho
-// "Questão / Respostas" ocupa mais ou menos uma linha.
+// Proporções da tabela da Univag. A altura aparente de cada linha muda muito
+// com o ângulo da câmera (nas fotos de teste, de 6% a 9% da largura da
+// tabela); o quadro usa um valor alto para a tabela nunca ficar cortada,
+// e a folga vertical do recorte cobre o resto.
 // TODO: recalibrar com o modelo oficial quando chegar (seção 6).
-const ALTURA_LINHA = 0.085
+const ALTURA_LINHA = 0.11
 const LINHAS_CABECALHO = 1
 // Largura do quadro em relação à largura do vídeo na tela.
 const LARGURA_QUADRO = 0.84
 // Margem extra no recorte, em fração do tamanho do quadro, para tolerar
-// uma tabela um pouco fora do lugar.
-const MARGEM = 0.1
+// uma tabela fora do lugar. Na vertical é maior: deslocar para cima ou para
+// baixo é o erro mais comum, e linhas de texto a mais no recorte não
+// atrapalham a leitura.
+const MARGEM_X = 0.1
+const MARGEM_Y = 0.3
 
 function proporcaoQuadro(nQuestoes: number) {
   return (nQuestoes + LINHAS_CABECALHO) * ALTURA_LINHA
@@ -80,8 +85,8 @@ export default function Camera({ nQuestoes, visivel, onCapturar, onFechar }: Pro
   function capturar() {
     const v = video.current
     if (!v || !tamanho) return
-    const mx = qw * MARGEM
-    const my = qh * MARGEM
+    const mx = qw * MARGEM_X
+    const my = qh * MARGEM_Y
     const x0 = Math.max(0, qx - mx) * tamanho.w
     const y0 = Math.max(0, qy - my) * tamanho.h
     const x1 = Math.min(1, qx + qw + mx) * tamanho.w

@@ -60,14 +60,27 @@ function ajustar(obs: Obs[], z: (o: Obs) => number): [number, number, number] {
 
 type Obs = { linha: number; coluna: number; x: number; y: number }
 
-export type Grade = { linhas: Circulo[][]; raio: number }
+// aneis: pontuação de anel (0 a 5) de cada linha escolhida
+export type Grade = { linhas: Circulo[][]; aneis: number[]; raio: number }
+
+// Pontuação mínima de anel (0 a 5) de cada linha escolhida. Nas fotos de
+// teste, todas as linhas da tabela tiraram 5,0 e as de fora no máximo 3,6.
+// Se alguma linha ficar abaixo do mínimo, a tabela provavelmente está cortada
+// e a grade pode estar deslocada: todas as respostas viram '?'.
+// TODO: recalibrar com o conjunto de fotos (poc/avaliar.py).
+export const ANEL_MINIMO = 4.3
 
 /**
  * Estima a grade (nQuestoes linhas × 5 colunas) a partir das bolinhas
  * detectadas, mesmo que algumas faltem, e devolve a posição de TODAS elas.
- * Devolve null se não encontrar nada parecido com a tabela.
+ * anel(c) diz de 0 a 1 quanto a posição c parece uma bolinha impressa, ou
+ * null se cair fora da imagem. Devolve null se não encontrar a tabela.
  */
-export function agruparLinhas(detectados: Circulo[], nQuestoes: number): Grade | null {
+export function agruparLinhas(
+  detectados: Circulo[],
+  nQuestoes: number,
+  anel: (c: Circulo) => number | null,
+): Grade | null {
   if (detectados.length === 0) return null
   // 5. fica com o tamanho dominante
   let rmed = mediana(detectados.map((c) => c.r))
@@ -163,29 +176,45 @@ export function agruparLinhas(detectados: Circulo[], nQuestoes: number): Grade |
   }
 
   // 10. o professor já informou quantas questões há: escolhe as nQuestoes
-  // linhas seguidas com mais evidência
-  const porLinha = new Array(Math.max(nQuestoes, ...obs.map((o) => o.linha + 1))).fill(0)
-  for (const o of obs) porLinha[o.linha]++
-  let s0 = 0
-  let melhor = -1
-  for (let k = 0; k <= porLinha.length - nQuestoes; k++) {
-    const s = porLinha.slice(k, k + nQuestoes).reduce((a: number, b: number) => a + b, 0)
-    if (s > melhor) {
-      melhor = s
+  // linhas seguidas com mais evidência. A evidência de cada linha é o número
+  // de bolinhas detectadas nela mais a pontuação de anel nas 5 posições
+  // previstas. Testa também linhas acima e abaixo das detectadas, porque a
+  // questão 1 (ou a última) pode não ter sido detectada.
+  const linhasObs = obs.map((o) => o.linha)
+  const rMin = Math.min(...linhasObs)
+  const rMax = Math.max(...linhasObs)
+  const detectadas = new Map<number, number>()
+  for (const l of linhasObs) detectadas.set(l, (detectadas.get(l) ?? 0) + 1)
+  const candidatas = new Map<number, { pos: Circulo[]; anel: number; det: number }>()
+  for (let linha = rMin - nQuestoes; linha <= rMax + nQuestoes; linha++) {
+    const pos = [0, 1, 2, 3, 4].map((coluna) => ({
+      x: prever(cx, coluna, linha),
+      y: prever(cy, coluna, linha),
+      r: rmed,
+    }))
+    const notas = pos.map(anel)
+    if (notas.some((n) => n === null)) continue // linha fora da imagem
+    const soma = (notas as number[]).reduce((a, b) => a + b, 0)
+    candidatas.set(linha, { pos, anel: soma, det: detectadas.get(linha) ?? 0 })
+  }
+  let s0: number | null = null
+  let melhor = -Infinity
+  for (const k of candidatas.keys()) {
+    let soma = 0
+    let completo = true
+    for (let j = 0; j < nQuestoes && completo; j++) {
+      const c = candidatas.get(k + j)
+      if (c) soma += c.anel + c.det
+      else completo = false
+    }
+    if (completo && soma > melhor) {
+      melhor = soma
       s0 = k
     }
   }
-  const linhas: Circulo[][] = []
-  for (let linha = s0; linha < s0 + nQuestoes; linha++) {
-    linhas.push(
-      [0, 1, 2, 3, 4].map((coluna) => ({
-        x: prever(cx, coluna, linha),
-        y: prever(cy, coluna, linha),
-        r: rmed,
-      })),
-    )
-  }
-  return { linhas, raio: rmed }
+  if (s0 === null) return null
+  const escolhidas = Array.from({ length: nQuestoes }, (_, j) => candidatas.get(s0 + j)!)
+  return { linhas: escolhidas.map((c) => c.pos), aneis: escolhidas.map((c) => c.anel), raio: rmed }
 }
 
 /**

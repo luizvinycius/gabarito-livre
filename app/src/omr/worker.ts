@@ -5,7 +5,7 @@
 
 import * as opencv from '@techstark/opencv-js'
 import type { Mensagem, Resposta, Circulo, RespostaLida } from './protocolo'
-import { agruparLinhas, decidir } from './leitura'
+import { ANEL_MINIMO, agruparLinhas, decidir } from './leitura'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CV = any
@@ -32,7 +32,7 @@ async function carregar() {
   // em branco para a primeira folha de verdade já sair rápida.
   const largura = 800
   const altura = 700
-  processar(largura, altura, new Uint8Array(largura * altura * 4).fill(255).buffer, 8)
+  processar(largura, altura, new Uint8Array(largura * altura * 4).fill(255).buffer, 8, largura)
   responder({ tipo: 'pronto', versao: versaoOpenCV(m) })
 }
 
@@ -63,7 +63,13 @@ function versaoOpenCV(m: CV): string {
   }
 }
 
-function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuestoes: number): Resposta {
+function processar(
+  larguraOriginal: number,
+  alturaOriginal: number,
+  pixels: ArrayBuffer,
+  nQuestoes: number,
+  larguraAlvo: number,
+): Resposta {
   if (!cv) throw new Error('OpenCV ainda não carregou')
   const tempos: Record<string, number> = {}
   let t = performance.now()
@@ -73,8 +79,13 @@ function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuesto
     t = agora
   }
 
-  const rgba = new cv.Mat(altura, largura, cv.CV_8UC4)
-  rgba.data.set(new Uint8Array(pixels))
+  // 1. reduzir para a largura alvo
+  const original = new cv.Mat(alturaOriginal, larguraOriginal, cv.CV_8UC4)
+  original.data.set(new Uint8Array(pixels))
+  const largura = larguraAlvo
+  const altura = Math.round((alturaOriginal * larguraAlvo) / larguraOriginal)
+  const rgba = new cv.Mat()
+  cv.resize(original, rgba, new cv.Size(largura, altura), 0, 0, cv.INTER_AREA)
   const rgb = new cv.Mat()
   const hsv = new cv.Mat()
   const cinza = new cv.Mat()
@@ -130,10 +141,6 @@ function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuesto
     }
     marcar('filtrar círculos')
 
-    // 5 a 10. estimar a grade
-    const grade = agruparLinhas(unicos, nQuestoes)
-    marcar('estimar grade')
-
     // 11. normalizar a iluminação: a mediana larga (61 px) roda numa cópia a
     // 1/4 do tamanho (15 px), que dá quase o mesmo fundo e é ~7x mais rápida
     cv.resize(cinza, pequena, new cv.Size(Math.trunc(largura / 4), Math.trunc(altura / 4)), 0, 0, cv.INTER_AREA)
@@ -141,10 +148,16 @@ function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuesto
     cv.resize(pequena, fundo, new cv.Size(largura, altura), 0, 0, cv.INTER_LINEAR)
     marcar('normalizar iluminação')
 
+    // 5 a 10. estimar a grade
+    const imagem = { cinza: cinza.data, fundo: fundo.data, largura, altura }
+    const grade = agruparLinhas(unicos, nQuestoes, (c) => notaAnel(imagem, c))
+    const tabelaCortada = !!grade && grade.aneis.some((a) => a < ANEL_MINIMO)
+    marcar('estimar grade')
+
     // 12 e 13. medir o preenchimento de cada bolinha e decidir cada linha
     const respostas: RespostaLida[] = (grade?.linhas ?? []).map((linha) => {
-      const preenchimento = linha.map((c) => preenchimentoDisco(cinza.data, fundo.data, largura, altura, c))
-      return { letra: decidir(preenchimento), preenchimento }
+      const preenchimento = linha.map((c) => preenchimentoDisco(imagem, c))
+      return { letra: tabelaCortada ? '?' : decidir(preenchimento), preenchimento }
     })
     marcar('ler respostas')
 
@@ -156,24 +169,60 @@ function processar(largura: number, altura: number, pixels: ArrayBuffer, nQuesto
       contornos: contornos.size(),
       circulos: unicos,
       grade: grade?.linhas ?? null,
+      tabelaCortada,
+      aneis: grade?.aneis ?? [],
       respostas,
     }
   } finally {
-    for (const m of [rgba, rgb, hsv, cinza, verm1, verm2, binaria, contornos, hierarquia, fundo, pequena, kernel]) {
+    for (const m of [original, rgba, rgb, hsv, cinza, verm1, verm2, binaria, contornos, hierarquia, fundo, pequena, kernel]) {
       m.delete()
     }
   }
 }
 
-// Escuridão média (0 a 1) num disco de 0,6 raio, com a iluminação normalizada
-// (cinza / fundo), como o fill_ratio do protótipo.
-function preenchimentoDisco(
-  cinza: Uint8Array,
-  fundo: Uint8Array,
-  largura: number,
-  altura: number,
-  { x, y, r }: Circulo,
-): number {
+type Imagem = { cinza: Uint8Array; fundo: Uint8Array; largura: number; altura: number }
+
+// Escuridão (0 a 1) de um pixel com a iluminação normalizada (cinza / fundo).
+function escuridao({ cinza, fundo, largura }: Imagem, px: number, py: number): number {
+  const i = py * largura + px
+  return (255 - Math.min(255, Math.trunc((cinza[i] / (fundo[i] + 1)) * 255))) / 255
+}
+
+// 0 a 1: quanto (x, y, r) parece uma bolinha impressa, isto é, um anel escuro
+// com papel claro em volta. null se cair fora da imagem. Procura o anel numa
+// vizinhança pequena (até 0,3 raio de deslocamento), porque a grade afim erra
+// alguns pixels nas pontas quando há perspectiva. Igual ao ring_score do
+// protótipo.
+function notaAnel(img: Imagem, { x, y, r }: Circulo): number | null {
+  if (x < 1.8 * r || x >= img.largura - 1.8 * r || y < 1.8 * r || y >= img.altura - 1.8 * r) return null
+  let melhor = 0
+  for (const dx of [-0.3, 0, 0.3]) {
+    for (const dy of [-0.3, 0, 0.3]) {
+      const cx = x + dx * r
+      const cy = y + dy * r
+      let anel = 0
+      let fora = 0
+      for (let k = 0; k < 24; k++) {
+        const a = (2 * Math.PI * k) / 24
+        const c = Math.cos(a)
+        const s = Math.sin(a)
+        let max = 0
+        for (const f of [0.7, 0.8, 0.9, 1.0, 1.1]) {
+          max = Math.max(max, escuridao(img, Math.trunc(cx + f * r * c), Math.trunc(cy + f * r * s)))
+        }
+        anel += max
+        fora += escuridao(img, Math.trunc(cx + 1.4 * r * c), Math.trunc(cy + 1.4 * r * s))
+      }
+      melhor = Math.max(melhor, anel / 24 - fora / 24)
+    }
+  }
+  return Math.min(1, Math.max(0, melhor / 0.3))
+}
+
+// Escuridão média (0 a 1) num disco de 0,6 raio, como o fill_ratio do
+// protótipo.
+function preenchimentoDisco(img: Imagem, { x, y, r }: Circulo): number {
+  const { largura, altura } = img
   const cx = Math.trunc(x)
   const cy = Math.trunc(y)
   const raio = Math.max(2, Math.trunc(r * 0.6))
@@ -184,19 +233,18 @@ function preenchimentoDisco(
       const px = cx + dx
       const py = cy + dy
       if (dx * dx + dy * dy > raio * raio || px < 0 || py < 0 || px >= largura || py >= altura) continue
-      const i = py * largura + px
-      soma += Math.min(255, Math.trunc((cinza[i] / (fundo[i] + 1)) * 255))
+      soma += escuridao(img, px, py)
       n++
     }
   }
-  return n ? (255 - soma / n) / 255 : 0
+  return n ? soma / n : 0
 }
 
 escopo.onmessage = async (e: MessageEvent<Mensagem>) => {
   try {
     const msg = e.data
     if (msg.tipo === 'carregar') await carregar()
-    else responder(processar(msg.largura, msg.altura, msg.pixels, msg.nQuestoes))
+    else responder(processar(msg.largura, msg.altura, msg.pixels, msg.nQuestoes, msg.larguraAlvo))
   } catch (err) {
     responder({ tipo: 'erro', mensagem: err instanceof Error ? err.message : String(err) })
   }
