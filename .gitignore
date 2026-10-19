@@ -1,0 +1,7 @@
+node_modules/
+dist/
+provas/
+dataset/fotos-reais/
+poc/*.png
+.env
+__pycache__/
