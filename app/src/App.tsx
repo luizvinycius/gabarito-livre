@@ -4,8 +4,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { Circulo, Mensagem, Resposta, RespostaLida } from './omr/protocolo'
+import Camera from './Camera'
 
-const LARGURA_ALVO = 1000
+// Largura para a qual a imagem é reduzida antes da leitura. Os limites de
+// raio do filtro de círculos (8 a 40 px) foram ajustados para a folha
+// inteira a 1000 px; o recorte do quadro-guia tem só a tabela, então usa
+// uma largura menor para as bolinhas ficarem no mesmo tamanho.
+const LARGURA_FOLHA = 1000
+const LARGURA_RECORTE = 800
 
 function textoRespostas(respostas: RespostaLida[]) {
   return respostas.length ? respostas.map((r) => r.letra).join('') : '(tabela não encontrada)'
@@ -59,7 +65,7 @@ function desenharLeitura(
 export default function App() {
   const worker = useRef<Worker | null>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
-  const imagem = useRef<ImageBitmap | null>(null)
+  const imagem = useRef<{ fonte: ImageBitmap | HTMLCanvasElement; largura: number } | null>(null)
   const inicioEnvio = useRef(0)
   const preparo = useRef(0)
   const [carga, setCarga] = useState<{ ms: number; versao: string } | null>(null)
@@ -67,6 +73,7 @@ export default function App() {
   const [erro, setErro] = useState<string | null>(null)
   const [medicoes, setMedicoes] = useState<Medicao[]>([])
   const [nQuestoes, setNQuestoes] = useState(8)
+  const [cameraAberta, setCameraAberta] = useState(false)
 
   useEffect(() => {
     const inicio = performance.now()
@@ -99,11 +106,11 @@ export default function App() {
   }, [])
 
   function desenharFoto(): ImageData | null {
-    const foto = imagem.current
     const c = canvas.current
-    if (!foto || !c) return null
-    const escala = LARGURA_ALVO / foto.width
-    c.width = LARGURA_ALVO
+    if (!imagem.current || !c) return null
+    const { fonte: foto, largura } = imagem.current
+    const escala = largura / foto.width
+    c.width = largura
     c.height = Math.round(foto.height * escala)
     const ctx = c.getContext('2d', { willReadFrequently: true })!
     ctx.imageSmoothingQuality = 'high'
@@ -126,13 +133,18 @@ export default function App() {
     )
   }
 
+  function usarImagem(nova: { fonte: ImageBitmap | HTMLCanvasElement; largura: number }) {
+    const anterior = imagem.current?.fonte
+    if (anterior instanceof ImageBitmap) anterior.close()
+    imagem.current = nova
+    setMedicoes([])
+    rodar()
+  }
+
   async function escolherFoto(arquivo: File | undefined) {
     if (!arquivo) return
     try {
-      imagem.current?.close()
-      imagem.current = await createImageBitmap(arquivo)
-      setMedicoes([])
-      rodar()
+      usarImagem({ fonte: await createImageBitmap(arquivo), largura: LARGURA_FOLHA })
     } catch (err) {
       setErro(`Não consegui abrir a foto: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -155,7 +167,20 @@ export default function App() {
     <main>
       <h1>Teste da leitura</h1>
 
-      <section className="cartao">
+      {cameraAberta && (
+        <section className="cartao">
+          <Camera
+            nQuestoes={nQuestoes}
+            onFechar={() => setCameraAberta(false)}
+            onCapturar={(recorte) => {
+              setCameraAberta(false)
+              usarImagem({ fonte: recorte, largura: LARGURA_RECORTE })
+            }}
+          />
+        </section>
+      )}
+
+      <section className="cartao" hidden={cameraAberta}>
         {erro && <p className="erro">{erro}</p>}
         {carga ? (
           <p>
@@ -177,8 +202,11 @@ export default function App() {
           />
         </label>
 
-        <label className={`botao ${!carga || ocupado ? 'desativado' : ''}`}>
-          📷 Escolher ou tirar foto
+        <button className="botao" disabled={!carga || ocupado} onClick={() => setCameraAberta(true)}>
+          📷 Abrir câmera
+        </button>
+        <label className={`botao secundario ${!carga || ocupado ? 'desativado' : ''}`}>
+          🖼️ Escolher foto da galeria
           <input
             type="file"
             accept="image/*"
