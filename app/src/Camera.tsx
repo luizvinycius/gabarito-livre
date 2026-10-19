@@ -23,11 +23,13 @@ function proporcaoQuadro(nQuestoes: number) {
 
 type Props = {
   nQuestoes: number
+  // Escondida, a câmera continua ligada para a próxima folha.
+  visivel: boolean
   onCapturar: (recorte: HTMLCanvasElement) => void
   onFechar: () => void
 }
 
-export default function Camera({ nQuestoes, onCapturar, onFechar }: Props) {
+export default function Camera({ nQuestoes, visivel, onCapturar, onFechar }: Props) {
   const video = useRef<HTMLVideoElement>(null)
   const [tamanho, setTamanho] = useState<{ w: number; h: number } | null>(null)
   const [erro, setErro] = useState<string | null>(null)
@@ -57,6 +59,11 @@ export default function Camera({ nQuestoes, onCapturar, onFechar }: Props) {
       fluxo?.getTracks().forEach((t) => t.stop())
     }
   }, [])
+
+  // O Safari pausa o vídeo escondido; ao mostrar de novo, retoma.
+  useEffect(() => {
+    if (visivel) video.current?.play().catch(() => {})
+  }, [visivel])
 
   // Quadro em frações do vídeo (0 a 1). Se a tabela ficar alta demais para o
   // vídeo, reduz a largura para caber.
@@ -121,7 +128,7 @@ export default function Camera({ nQuestoes, onCapturar, onFechar }: Props) {
       </p>
       <div className="acoes">
         <button className="botao secundario" onClick={onFechar}>
-          Cancelar
+          Desligar
         </button>
         <button className="botao" disabled={!tamanho} onClick={capturar}>
           📸 Capturar

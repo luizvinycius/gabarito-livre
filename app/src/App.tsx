@@ -73,7 +73,9 @@ export default function App() {
   const [erro, setErro] = useState<string | null>(null)
   const [medicoes, setMedicoes] = useState<Medicao[]>([])
   const [nQuestoes, setNQuestoes] = useState(8)
-  const [cameraAberta, setCameraAberta] = useState(false)
+  // A câmera fica ligada (só escondida) entre uma folha e outra: religar
+  // a câmera faz o Safari pedir permissão de novo.
+  const [camera, setCamera] = useState<'desligada' | 'visivel' | 'escondida'>('desligada')
 
   useEffect(() => {
     const inicio = performance.now()
@@ -167,20 +169,21 @@ export default function App() {
     <main>
       <h1>Teste da leitura</h1>
 
-      {cameraAberta && (
-        <section className="cartao">
+      {camera !== 'desligada' && (
+        <section className="cartao" hidden={camera === 'escondida'}>
           <Camera
             nQuestoes={nQuestoes}
-            onFechar={() => setCameraAberta(false)}
+            visivel={camera === 'visivel'}
+            onFechar={() => setCamera('desligada')}
             onCapturar={(recorte) => {
-              setCameraAberta(false)
+              setCamera('escondida')
               usarImagem({ fonte: recorte, largura: LARGURA_RECORTE })
             }}
           />
         </section>
       )}
 
-      <section className="cartao" hidden={cameraAberta}>
+      <section className="cartao" hidden={camera === 'visivel'}>
         {erro && <p className="erro">{erro}</p>}
         {carga ? (
           <p>
@@ -202,9 +205,14 @@ export default function App() {
           />
         </label>
 
-        <button className="botao" disabled={!carga || ocupado} onClick={() => setCameraAberta(true)}>
-          📷 Abrir câmera
+        <button className="botao" disabled={!carga || ocupado} onClick={() => setCamera('visivel')}>
+          📷 {camera === 'escondida' ? 'Próxima folha' : 'Abrir câmera'}
         </button>
+        {camera === 'escondida' && (
+          <button className="botao secundario" onClick={() => setCamera('desligada')}>
+            Desligar câmera
+          </button>
+        )}
         <label className={`botao secundario ${!carga || ocupado ? 'desativado' : ''}`}>
           🖼️ Escolher foto da galeria
           <input

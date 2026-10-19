@@ -146,6 +146,12 @@ Observações:
 - O navegador acha um pouco mais de círculos que o Python na mesma foto (57 × 54), por causa do redimensionamento feito pelo canvas. Comparar com cuidado ao portar.
 - Falta testar no Chrome do Android.
 
+**Quadro-guia na câmera (18/10).** Numa foto de prova tirada no iPhone, a leitura da foto inteira deslocou a grade em uma linha: a questão 1 não virou candidata e o texto abaixo da tabela entrou como linha 8. Para resolver, a câmera ao vivo mostra um quadro onde o professor encaixa a tabela. A altura do quadro acompanha o número de questões, e só o recorte dele, com 10% de margem, vai para a leitura.
+- Resultado no iPhone: **leitura correta**, com **117 a 161 ms por folha**, menos que com a foto inteira.
+- As proporções do quadro (linha = 8,5% da largura da tabela, cabeçalho = 1 linha) foram estimadas pelas fotos. É preciso recalibrar com o modelo oficial.
+- A câmera fica ligada entre uma folha e outra, porque religar faz o Safari pedir permissão de novo.
+- **Em observação:** encaixar a tabela no quadro exige um pouco de cuidado. Não é difícil, mas pode cansar numa correção longa (150 provas). Ideias para a semana 3: quadro mais tolerante, captura automática quando a tabela estiver estável dentro do quadro e retorno visual de "encaixou".
+
 ### 3.6 Limitações conhecidas
 - Testado em **só 2 fotos**, do mesmo modelo.
 - Ainda não testado:
