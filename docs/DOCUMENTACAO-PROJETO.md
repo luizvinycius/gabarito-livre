@@ -142,7 +142,7 @@ Página de teste em `app/` (seção 8.5): roda num Web Worker as etapas pesadas 
 **Conclusão:** o OpenCV.js 5.0 (`@techstark/opencv-js`, num worker de módulo) funciona no Safari do iPhone, com folga para a meta de < 2 s. A stack está mantida.
 
 Observações:
-- Na foto do iPhone, só 21 círculos foram detectados, num total de 12 mil contornos. A causa ainda está sendo investigada; a suspeita é foto de longe, com bolinhas de raio menor que 8 px.
+- O tempo no iPhone foi medido com uma foto qualquer, não com uma prova; o tempo quase não depende do conteúdo da imagem. Falta repetir com uma foto de prova para ver a detecção das bolinhas.
 - O navegador acha um pouco mais de círculos que o Python na mesma foto (57 × 54), por causa do redimensionamento feito pelo canvas. Comparar com cuidado ao portar.
 - Falta testar no Chrome do Android.
 
