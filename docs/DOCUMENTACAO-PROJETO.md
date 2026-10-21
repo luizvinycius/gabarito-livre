@@ -165,7 +165,7 @@ Observações:
   - foto muito inclinada ou em perspectiva forte;
   - tabela de 10 questões;
   - outros modelos de curso.
-- Na foto 2 inteira, a questão 8 sai `C` no Python e `?` no app (gap de 0,13, perto do limite de 0,15): pequenas diferenças na decodificação da imagem mudam a grade em 1 ou 2 px. É um aviso, não um erro silencioso.
+- Na foto 2 inteira, a questão 8 saía `C` no Python e `?` no app. A causa não era a decodificação da imagem: o app reduzia a foto passando o tamanho final, e o Python passa o fator de escala, o que arredonda a escala vertical de outro jeito. Corrigido em 21/10; com os mesmos pixels, o `npm run avaliar` (app no Node) e o `poc/avaliar.py` dão hoje o mesmo preenchimento nas 80 bolinhas das 2 fotos. No celular a foto ainda passa pelo canvas antes do worker, então pode haver diferença pequena. A lição: respostas perto do limite mudam com detalhes mínimos do processamento, e o conjunto de fotos precisa medir isso.
 - Marcação muito fraca a lápis fica no limite (`?`).
 - Se a tabela tiver uma linha a mais ou a menos que o gabarito, a regra da tabela cortada deve pegar parte dos casos, mas isso não foi testado.
 
@@ -254,13 +254,15 @@ gabarito-livre/
 │   └── DOCUMENTACAO-PROJETO.md
 ├── poc/                      # protótipo Python (laboratório do algoritmo)
 │   ├── poc_bolhas.py
-│   └── avaliar.py            # a criar: roda o algoritmo no dataset e mede a precisão
+│   └── avaliar.py            # roda o algoritmo no dataset e mede a precisão
 ├── dataset/
 │   ├── fotos/                # fotos preenchidas pelo grupo (sem dados reais)
 │   └── respostas.csv         # gabarito real de cada foto
 └── app/                      # React + Vite + PWA
     └── src/
         ├── omr/              # algoritmo de leitura (porte do poc_bolhas.py)
+        │   ├── processar.ts  # leitura com o OpenCV.js (worker e Node)
+        │   ├── leitura.ts    # grade e decisão, sem OpenCV (testada no Vitest)
         │   └── worker.ts     # roda o OpenCV.js fora da thread da tela
         ├── pages/            # Gabarito, Camera, Resultado
         └── storage/          # gabaritos salvos (localStorage/IndexedDB)
@@ -276,6 +278,7 @@ ana_02.jpg,8,A_BCD*CC,Moto G,lapis; sombra; Q2 em branco; Q6 dupla
 - **Anote as respostas reais da folha**, não as que o app leu.
 - Arquivos que começam com `recorte-` foram salvos pelo app com o botão "Salvar recorte" (só a tabela) e são lidos a 800 px; os demais são a folha inteira (1000 px). O recomendado é usar recortes, porque é o que o app lê de verdade.
 - `python poc/avaliar.py` compara o lido com o esperado e informa: % de acertos, % com aviso (`?`/`*`) e **erros silenciosos**, que é a métrica mais importante, separados por celular e por condição (cada item de `condicao` separado por `;`). Com `--depurar`, salva em `poc/saida/` a imagem das folhas com problema. Sai com código 1 se houver erro silencioso.
+- `npm run avaliar` (dentro de `app/`) faz a mesma conta com o código do **app** (`app/src/omr/`), rodando no Node, com o mesmo CSV e as mesmas fotos. Os dois relatórios devem dar o mesmo resultado; se divergirem, as duas implementações deixaram de ser iguais.
 
 ### 8.4 Criar o app
 ```bash

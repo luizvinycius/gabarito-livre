@@ -5,6 +5,8 @@ Por enquanto contém só a **página de teste da leitura** (seção 8.5 da docum
 ```bash
 npm install
 npm run dev        # serve em https://<ip-do-pc>:5173 na rede local
+npm test           # testes do Vitest (src/omr/leitura.test.ts)
+npm run avaliar    # precisão do código do app no dataset/ (como o poc/avaliar.py)
 ```
 
 ## Testar no celular
