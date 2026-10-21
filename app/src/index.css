@@ -188,3 +188,234 @@ canvas {
 .acoes .botao {
   flex: 1;
 }
+
+/* ---- app do professor ---- */
+
+.topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chip {
+  padding: 8px 14px;
+  border: 1px solid #b0bec5;
+  border-radius: 999px;
+  background: #fff;
+  color: #1a1a1a;
+  font-size: 1rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.chip.ativo {
+  border-color: #1565c0;
+  background: #1565c0;
+  color: #fff;
+}
+
+.chip:disabled {
+  opacity: 0.5;
+}
+
+.atalhos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gabarito {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.linha-gabarito {
+  display: grid;
+  grid-template-columns: 1.8rem 1fr 4rem;
+  align-items: center;
+  gap: 8px;
+}
+
+.linha-gabarito.cab {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.numero {
+  font-weight: bold;
+  text-align: right;
+}
+
+.letras,
+.confirmar {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.letra {
+  min-height: 44px;
+  border: 1px solid #b0bec5;
+  border-radius: 8px;
+  background: #fff;
+  color: #1a1a1a;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.letra.marcada {
+  border-color: #1565c0;
+  background: #1565c0;
+  color: #fff;
+}
+
+.valor {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 6px;
+  border: 1px solid #b0bec5;
+  border-radius: 8px;
+  font-size: 1rem;
+  text-align: center;
+}
+
+.valor.invalido {
+  border-color: #c62828;
+  background: #ffebee;
+}
+
+.soma {
+  margin: 16px 0 8px;
+  font-size: 1.1rem;
+}
+
+.distribuir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.distribuir .valor {
+  width: 5rem;
+}
+
+.nota {
+  text-align: center;
+}
+
+.nota strong {
+  display: block;
+  font-size: 3.5rem;
+  line-height: 1.1;
+  color: #1565c0;
+}
+
+.nota.parcial strong {
+  color: #9e9e9e;
+}
+
+.nota > span {
+  color: #555;
+}
+
+.nota p {
+  margin: 8px 0 0;
+  font-size: 1.1rem;
+}
+
+.aviso {
+  color: #c62828;
+  font-weight: bold;
+}
+
+.questoes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.questoes li {
+  display: grid;
+  grid-template-columns: 1.8rem 1fr 2rem;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 4px;
+  border-bottom: 1px solid #eceff1;
+}
+
+.questoes li.pendente {
+  background: #ffebee;
+  border-radius: 8px;
+}
+
+.questoes li.confirmada {
+  background: #fff8e1;
+  border-radius: 8px;
+}
+
+.questoes .lida small {
+  margin-left: 10px;
+  color: #666;
+}
+
+.questoes .lida em {
+  color: #c62828;
+  font-style: normal;
+  font-weight: bold;
+}
+
+.marca {
+  font-size: 1.4rem;
+  font-weight: bold;
+  text-align: center;
+}
+
+.marca.certa {
+  color: #2e7d32;
+}
+
+.marca.errada {
+  color: #c62828;
+}
+
+.questoes .confirmar {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(5, 1fr) 1.8fr;
+}
+
+.questoes .confirmar .letra {
+  font-size: 1rem;
+}
+
+details.cartao summary {
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.historico {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.historico li {
+  padding: 4px 0;
+}
+
+.rodape {
+  margin: 24px 0;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.rodape a {
+  color: #78909c;
+}
+
+.atalhos input {
+  width: 3.5rem;
+}
