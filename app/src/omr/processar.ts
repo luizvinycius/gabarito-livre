@@ -4,7 +4,7 @@
 // (scripts/avaliar.ts), para os dois medirem exatamente o mesmo código.
 
 import type { Resposta, Circulo, RespostaLida } from './protocolo'
-import { ANEL_MINIMO, agruparLinhas, decidir } from './leitura'
+import { agruparLinhas, decidir, gradeSuspeita } from './leitura'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type CV = any
@@ -128,7 +128,7 @@ export function processar(
     // 5 a 10. estimar a grade
     const imagem = { cinza: cinza.data, fundo: fundo.data, largura, altura }
     const grade = agruparLinhas(unicos, nQuestoes, (c) => notaAnel(imagem, c))
-    const tabelaCortada = !!grade && grade.aneis.some((a) => a < ANEL_MINIMO)
+    const tabelaCortada = !!grade && gradeSuspeita(grade)
     marcar('estimar grade')
 
     // 12 e 13. medir o preenchimento de cada bolinha e decidir cada linha
@@ -147,7 +147,9 @@ export function processar(
       circulos: unicos,
       grade: grade?.linhas ?? null,
       tabelaCortada,
+      linhasExtras: grade?.linhasExtras ?? 0,
       aneis: grade?.aneis ?? [],
+      detectadas: grade?.detectadas ?? [],
       respostas,
     }
   } finally {

@@ -12,6 +12,17 @@ TARGET_W = 1000
 # e a grade pode estar deslocada: todas as respostas viram "?".
 # TODO: recalibrar com o conjunto de fotos (avaliar.py).
 MIN_RING = 4.3
+# A pontuação de anel não basta no modelo compacto (grade grossa): lá as
+# linhas de "DISSERTATIVA" e o cabeçalho tiram até 5,0. O que separa uma linha
+# de bolinhas de uma linha de texto é ter bolinhas detectadas: nas fotos e no
+# conjunto sintético, as linhas da tabela costumam ter de 2 a 5 e as de fora,
+# 0 (uma linha do meio pode ficar com 0 quando as bolinhas não formam uma
+# cadeia de 3). Se a primeira ou a última linha escolhida não tem nenhuma
+# bolinha detectada, o bloco provavelmente escorregou para uma linha de texto
+# (tabela cortada): todas as respostas viram "?".
+# Linha vizinha ao bloco com anel alto e MIN_DET_EXTRA detectadas: a tabela
+# tem mais linhas que o gabarito.
+MIN_DET_EXTRA = 2
 
 
 def student_ink_gray(img):
@@ -76,7 +87,8 @@ def ring_score(norm, x, y, r):
 def group_rows(circles, n_q, norm):
     """Estima a grade (linhas x 5 colunas) a partir das bolinhas detectadas,
     mesmo que algumas faltem, e devolve as posições de TODAS as bolinhas,
-    junto com a pontuação de anel de cada linha (0 a 5)."""
+    a pontuação de anel (0 a 5) e o número de bolinhas detectadas de cada
+    linha, e quantas linhas de bolinhas há fora do bloco escolhido."""
     rmed = np.median([c[2] for c in circles])
     circles = [c for c in circles if 0.75 * rmed < c[2] < 1.3 * rmed]
     rmed = np.median([c[2] for c in circles])
@@ -106,7 +118,7 @@ def group_rows(circles, n_q, norm):
         groups.setdefault(find(i), []).append(circles[i])
     chains = [g for g in groups.values() if len(g) >= 3]
     if not chains:
-        return [], [], rmed
+        return [], [], [], 0, rmed
     sp = np.percentile(gaps, 30)  # espaçamento entre colunas (vizinhos diretos)
 
     # colunas: agrupa os x de todas as bolinhas; fica com as 5 colunas mais povoadas e vizinhas
@@ -137,9 +149,14 @@ def group_rows(circles, n_q, norm):
                 obs.append((ri, ci, x, y))
 
     # ajuste afim (linha, coluna) -> (x, y), com descarte de pontos fora do padrão
+    if len(obs) < 3:
+        return [], [], [], 0, rmed
     obs = np.array(obs, float)
     for _ in range(3):
         A = np.c_[np.ones(len(obs)), obs[:, 1], obs[:, 0]]
+        if len(obs) < 3 or np.linalg.matrix_rank(A) < 3:
+            # tudo numa linha ou numa coluna só: não dá para estimar a grade
+            return [], [], [], 0, rmed
         cx, *_ = np.linalg.lstsq(A, obs[:, 2], rcond=None)
         cy, *_ = np.linalg.lstsq(A, obs[:, 3], rcond=None)
         res = np.hypot(A @ cx - obs[:, 2], A @ cy - obs[:, 3])
@@ -164,11 +181,23 @@ def group_rows(circles, n_q, norm):
         cand[ri] = (pos, sum(sc), det[k] if 0 <= k < len(det) else 0)
     blocks = [k for k in cand if all(k + j in cand for j in range(n_q))]
     if not blocks:
-        return [], [], rmed
+        return [], [], [], 0, rmed
     s0 = max(blocks, key=lambda k: sum(cand[k + j][1] + cand[k + j][2] for j in range(n_q)))
+
+    # linhas de bolinhas logo acima ou logo abaixo do bloco: a tabela tem mais
+    # linhas que o gabarito (ex.: folha de 10 questões com gabarito de 8). Aí
+    # a questão 1 é a primeira linha da tabela: o bloco sobe até ela.
+    def bolinhas(ri):
+        return ri in cand and cand[ri][1] >= MIN_RING and cand[ri][2] >= MIN_DET_EXTRA
+    while bolinhas(s0 - 1):
+        s0 -= 1
+    extras = 0
+    while bolinhas(s0 + n_q + extras):
+        extras += 1
     rows = [[(x, y, rmed) for x, y in cand[ri][0]] for ri in range(s0, s0 + n_q)]
     rings = [cand[ri][1] for ri in range(s0, s0 + n_q)]
-    return rows, rings, rmed
+    dets = [int(cand[ri][2]) for ri in range(s0, s0 + n_q)]
+    return rows, rings, dets, extras, rmed
 
 
 def normalize_light(gray):
@@ -201,8 +230,10 @@ def read_image(img, n_q, target_w=TARGET_W):
     img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
     gray = student_ink_gray(img)
     norm = normalize_light(gray)
-    rows, rings, rmed = group_rows(find_circles(gray), n_q, norm)
-    suspect = any(v < MIN_RING for v in rings)
+    rows, rings, dets, extras, rmed = group_rows(find_circles(gray), n_q, norm)
+    # tabela cortada (ou grade deslocada) ou com linhas a mais: o app avisa e
+    # aqui todas as respostas viram "?"
+    suspect = any(v < MIN_RING for v in rings) or (dets and 0 in (dets[0], dets[-1])) or extras > 0
     dbg = img.copy()
     result = []
     for qi, row in enumerate(rows, 1):
@@ -211,7 +242,7 @@ def read_image(img, n_q, target_w=TARGET_W):
         top, second, base = f[order[0]], f[order[1]], np.median(f)
         gap = top - base
         if suspect:
-            ans = "?"          # tabela cortada ou grade deslocada: reenquadrar
+            ans = "?"          # tabela cortada, grade deslocada ou linhas a mais
         elif gap < 0.15:
             ans = "?"          # em branco ou incerto: professor confirma
         elif second - base > 0.6 * gap:

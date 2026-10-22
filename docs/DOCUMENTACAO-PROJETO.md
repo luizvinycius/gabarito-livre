@@ -63,9 +63,10 @@ Ideias discutidas e deixadas para depois, em ordem de afinidade com o MVP:
    - resposta lida em cada questão.
 4. **Confirmação manual** quando a leitura ficar incerta (`?`) ou houver duas marcadas (`*`): o professor confirma com um toque.
 5. **Correção em sequência:** lê uma folha, mostra o resultado e passa para a próxima.
+6. **A turma inteira ao fim (21/10):** lista das folhas corrigidas com nota, média, maior e menor nota; qualquer folha pode ser aberta de novo para rever a leitura sobre a foto ou corrigir uma questão. Gabaritos salvos com nome (provas A e B) e captura automática quando a tabela encaixa no quadro.
 
 ### 2.2 Fora do MVP
-- **Identificar o aluno.** Decisão de 16/10: alunos às vezes fazem a prova sem estar na lista da turma, o que complicaria o fluxo. Fica para uma versão futura.
+- **Identificar o aluno.** Decisão de 16/10: alunos às vezes fazem a prova sem estar na lista da turma, o que complicaria o fluxo. Fica para uma versão futura. (Em 21/10 entrou só um campo **opcional** de texto livre na folha, sem lista da turma, para o professor achar a folha na lista se quiser.)
 - Planilha ou exportação de notas, login, nuvem, backend, dissertativas, banco de questões e integração com o AVA.
 
 ### 2.3 Critérios de sucesso (definir o "funciona" antes de codar)
@@ -124,8 +125,11 @@ A incerta foi uma marcação a lápis muito fraca, com a letra ainda visível. O
 8. **Linhas:** índice da linha = posição y da cadeia dividida pelo espaçamento médio entre linhas.
 9. **Ajuste afim** (linha, coluna) → (x, y) por mínimos quadrados, descartando pontos fora do padrão. Isso **estima a posição de todas as bolinhas**, inclusive as não detectadas, e tolera rotação, escala e posição.
 10. **Escolher as N linhas consecutivas** com mais evidência, onde N é o número de questões do gabarito. As candidatas incluem N linhas acima e abaixo das detectadas, porque a questão 1 ou a última podem não ter sido detectadas. A evidência de cada linha é o número de bolinhas detectadas nela mais a **pontuação de anel** (0 a 5): em cada posição prevista, o quanto há um círculo escuro (raio de 0,7 a 1,1) com papel claro em volta (1,4 raio), procurando numa vizinhança de até 0,3 raio porque a grade afim erra alguns pixels nas pontas quando há perspectiva.
-    - **Tabela cortada:** se alguma linha escolhida pontuar menos que **4,3**, a grade pode estar deslocada; **todas** as respostas viram `?` e o app pede para reenquadrar. Nas fotos de teste, as linhas da tabela tiraram 5,0 e as de fora no máximo 3,6.
-11. **Normalizar a iluminação:** cinza dividido pelo fundo, que é a `medianBlur` de 15 px numa cópia a 1/4 do tamanho (equivale à de 61 px na imagem inteira e é ~7x mais rápida). Feita antes do passo 10, que também a usa.
+    - **Tabela cortada:** se alguma linha escolhida pontuar menos que **4,3**, a grade pode estar deslocada; **todas** as respostas viram `?` e o app pede para reenquadrar. Nas fotos do modelo das fotos de referência, as linhas da tabela tiraram 5,0 e as de fora no máximo 3,6.
+    - **Bolinhas detectadas por linha (21/10):** no modelo compacto (grade grossa), as linhas de "DISSERTATIVA" e o cabeçalho tiram até 5,0 de anel, então o anel sozinho não separa uma linha de bolinhas de uma linha de texto. O que separa é o número de bolinhas detectadas na linha: as da tabela costumam ter de 2 a 5 e as de fora, 0. Uma linha do meio pode ficar com 0 (quando as bolinhas não formam uma cadeia de 3), mas se a **primeira ou a última** linha escolhida não tem nenhuma, o bloco escorregou para uma linha de texto: tabela cortada.
+    - **Linhas a mais (21/10):** linhas logo acima ou abaixo do bloco com anel ≥ 4,3 e pelo menos 2 bolinhas detectadas são linhas da tabela que sobraram (ex.: folha de 10 questões com gabarito de 8). O bloco passa a começar na primeira linha da tabela, e o app avisa e pede para o professor ajustar o gabarito, tirar outra foto ou corrigir só as primeiras questões. No Python, todas as respostas viram `?`.
+    - **Grade degenerada:** com todas as bolinhas numa linha ou numa coluna só, não dá para estimar a grade: "tabela não encontrada" (antes, o app dava erro e o Python devolvia uma grade sem sentido).
+11. **Normalizar a iluminação:** cinza dividido pelo fundo, que é a `medianBlur` de 23 px numa cópia a 1/4 do tamanho (equivale à de 93 px na imagem inteira e é ~7x mais rápida). Feita antes do passo 10, que também a usa. Era de 61 px até 21/10: no modelo compacto, a bolinha pintada cheia entre linhas grossas ocupava mais da metade da janela e virava "papel", saindo mais clara que as vazias.
 12. **Medir o preenchimento:** escuridão média num disco de 0,6 raio em cada bolinha.
 13. **Decidir por linha:** `gap` = maior escuridão − mediana da linha.
     - `gap < 0,15`: **`?`** (em branco ou incerto);
@@ -156,18 +160,22 @@ Observações:
 - **Em observação:** encaixar a tabela no quadro exige um pouco de cuidado. Não é difícil, mas pode cansar numa correção longa (150 provas). Ideias para a semana 3: quadro mais tolerante, captura automática quando a tabela estiver estável dentro do quadro e retorno visual de "encaixou".
 
 ### 3.6 Limitações conhecidas
-- Testado em **só 2 fotos** reais, do mesmo modelo, mais recortes simulados a partir delas. Os limites (0,15 do gap, 4,3 da pontuação de anel) precisam ser calibrados com o conjunto de fotos.
-- Ainda não testado:
-  - questão em branco;
-  - duas marcadas de propósito;
-  - borracha;
-  - luz ruim;
-  - foto muito inclinada ou em perspectiva forte;
-  - tabela de 10 questões;
-  - outros modelos de curso.
+- Testado em **só 3 fotos** reais (2 do modelo das fotos de referência e 1 do modelo compacto), mais o conjunto sintético (seção 3.7). Os limites (0,15 do gap, 4,3 da pontuação de anel, 2 bolinhas detectadas) precisam ser calibrados com o conjunto de fotos.
+- Testado só no conjunto sintético, ainda sem fotos reais: questão em branco, duas marcadas, borracha, sombra, foto torta e em perspectiva, tabela de 10 questões, linhas a mais e a menos.
+- **Luz muito amarela** (sem o balanço de branco do celular): a tabela não é encontrada. A borda serrilhada e o miolo da tinta preta ficam marrons e caem na faixa do vermelho do professor, que é apagada, e isso quebra o anel das bolinhas. Subir o brilho mínimo do vermelho ou balancear o branco antes resolveu a luz amarela, mas estragou as fotos reais (a caneta vermelha delas tem partes escuras e pouca saturação). Falha com aviso, não com nota errada. Esperar as fotos do grupo com luz amarela para decidir.
+- **Lápis fraco e desfoque** saem como `?` na maior parte das questões (aviso, não erro).
 - Na foto 2 inteira, a questão 8 saía `C` no Python e `?` no app. A causa não era a decodificação da imagem: o app reduzia a foto passando o tamanho final, e o Python passa o fator de escala, o que arredonda a escala vertical de outro jeito. Corrigido em 21/10; com os mesmos pixels, o `npm run avaliar` (app no Node) e o `poc/avaliar.py` dão hoje o mesmo preenchimento nas 80 bolinhas das 2 fotos. No celular a foto ainda passa pelo canvas antes do worker, então pode haver diferença pequena. A lição: respostas perto do limite mudam com detalhes mínimos do processamento, e o conjunto de fotos precisa medir isso.
 - Marcação muito fraca a lápis fica no limite (`?`).
-- Se a tabela tiver uma linha a mais ou a menos que o gabarito, a regra da tabela cortada deve pegar parte dos casos, mas isso não foi testado.
+- Linhas a mais e a menos que o gabarito: tratadas desde 21/10 (passo 10) e testadas no conjunto sintético.
+
+### 3.7 Conjunto sintético (21/10)
+`poc/gerar_sinteticas.py` gera 89 imagens em `dataset/sinteticas/` (fora do Git; leva ~20 s), sempre iguais:
+- **6 modelos de tabela:** o das fotos de referência com 8 e 10 questões e 4 variações do modelo compacto, inclusive com as linhas de dissertativa;
+- **9 variações de foto** em cada um: caneta preta e azul, lápis, marcação fraca, rabiscada, borracha, sombra, luz amarela, torta, perspectiva, desfoque, JPEG forte com ruído, correção em vermelho do professor e foto da folha inteira de perto e de longe. Cada folha tem uma questão em branco e uma com duas marcadas;
+- **enquadramento:** o recorte do quadro-guia com a tabela deslocada de −2 a +3 linhas (tem de acertar) e cortada em cima e embaixo (tem de avisar), em 3 modelos e na foto real do modelo compacto;
+- **linhas a mais e a menos** que o gabarito (tem de avisar).
+
+No CSV, `?` na resposta esperada quer dizer "o app tem de pedir confirmação". Resultado em 21/10, igual no Python e no app: **0 erro silencioso** (antes das mudanças do dia: 19, nas linhas a mais e na foto real cortada em cima), 87% das questões certas e o resto com aviso, quase todo na luz amarela, no lápis fraco com desfoque e nas folhas que têm de avisar. A leitura de cada imagem é idêntica nas duas implementações.
 
 ---
 
@@ -274,11 +282,11 @@ arquivo,n_questoes,respostas,celular,condicao
 ana_01.jpg,8,BABCDACC,iPhone 12,caneta azul; luz boa
 ana_02.jpg,8,A_BCD*CC,Moto G,lapis; sombra; Q2 em branco; Q6 dupla
 ```
-- `_` = questão em branco, `*` = duas marcadas de propósito.
+- `_` = questão em branco, `*` = duas marcadas de propósito, `?` = o app tem de pedir confirmação (usado no conjunto sintético para tabela cortada e linhas a mais).
 - **Anote as respostas reais da folha**, não as que o app leu.
 - Arquivos que começam com `recorte-` foram salvos pelo app com o botão "Salvar recorte" (só a tabela) e são lidos a 800 px; os demais são a folha inteira (1000 px). O recomendado é usar recortes, porque é o que o app lê de verdade.
-- `python poc/avaliar.py` compara o lido com o esperado e informa: % de acertos, % com aviso (`?`/`*`) e **erros silenciosos**, que é a métrica mais importante, separados por celular e por condição (cada item de `condicao` separado por `;`). Com `--depurar`, salva em `poc/saida/` a imagem das folhas com problema. Sai com código 1 se houver erro silencioso.
-- `npm run avaliar` (dentro de `app/`) faz a mesma conta com o código do **app** (`app/src/omr/`), rodando no Node, com o mesmo CSV e as mesmas fotos. Os dois relatórios devem dar o mesmo resultado; se divergirem, as duas implementações deixaram de ser iguais.
+- `python poc/avaliar.py` compara o lido com o esperado e informa: % de acertos, % com aviso (`?`/`*`, ou tabela não encontrada) e **erros silenciosos**, que é a métrica mais importante, separados por celular e por condição (cada item de `condicao` separado por `;`). Com `--depurar`, salva em `poc/saida/` a imagem das folhas com problema. Sai com código 1 se houver erro silencioso.
+- `npm run avaliar` (dentro de `app/`) faz a mesma conta com o código do **app** (`app/src/omr/`), rodando no Node, com o mesmo CSV e as mesmas fotos. Os dois relatórios devem dar o mesmo resultado; se divergirem, as duas implementações deixaram de ser iguais. Com `--conjunto sinteticas`, os dois medem no conjunto sintético (seção 3.7).
 
 ### 8.4 Criar o app
 ```bash

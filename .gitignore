@@ -6,3 +6,5 @@ poc/*.png
 poc/saida/
 .env
 __pycache__/
+
+dataset/sinteticas/

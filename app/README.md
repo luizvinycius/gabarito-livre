@@ -1,21 +1,25 @@
 # App (React + Vite + TypeScript)
 
-O app do professor (MVP, seção 2.1 da documentação): **gabarito → câmera → resultado → próxima folha**, com a nota, os acertos e a confirmação com um toque das questões em dúvida. O gabarito fica salvo no aparelho.
+O app do professor (MVP, seção 2.1 da documentação): **gabarito → câmera → resultado → próxima folha → turma**, com a nota, os acertos, a confirmação com um toque das questões em dúvida e a captura automática quando a tabela encaixa no quadro. Gabaritos (com nome) e folhas corrigidas ficam no aparelho (localStorage); as fotos das folhas, no IndexedDB.
 
 A **página de teste da leitura** (seção 8.5) continua no endereço com `#teste` (link no rodapé): carrega uma foto, mostra o tempo de cada etapa, o relatório para o grupo e o botão "Salvar recorte".
 
 | Pasta | O que tem |
 |---|---|
-| `src/telas/` | `Corretor` (fluxo), `Gabarito`, `Resultado` e `PaginaTeste` |
+| `src/telas/` | `Corretor` (fluxo), `Gabarito`, `Resultado`, `Turma` e `PaginaTeste` |
 | `src/correcao.ts` | nota, acertos e confirmações (testado no Vitest) |
+| `src/sessao.ts` | gabaritos salvos, folhas da turma e o que fica no aparelho (testado no Vitest) |
+| `src/fotos.ts` | fotos das folhas no IndexedDB |
+| `src/Camera.tsx`, `src/captura.ts` | câmera com quadro-guia e as regras da captura automática |
 | `src/omr/` | a leitura: `processar.ts` (OpenCV), `leitura.ts` (grade e decisão), `worker.ts`, `useLeitor.ts` |
 | `scripts/avaliar.ts` | `npm run avaliar`: precisão do código do app no `dataset/` |
 
 ```bash
 npm install
 npm run dev        # serve em https://<ip-do-pc>:5173 na rede local
-npm test           # testes do Vitest (src/omr/leitura.test.ts)
+npm test           # testes do Vitest
 npm run avaliar    # precisão do código do app no dataset/ (como o poc/avaliar.py)
+npm run avaliar -- --conjunto sinteticas   # no conjunto sintético (python poc/gerar_sinteticas.py antes)
 ```
 
 ## Testar no celular

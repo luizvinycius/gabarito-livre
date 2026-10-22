@@ -28,7 +28,9 @@ type Medicao = {
   circulos: Circulo[]
   respostas: RespostaLida[]
   tabelaCortada: boolean
+  linhasExtras: number
   aneis: number[]
+  detectadas: number[]
 }
 
 // Nome do arquivo do recorte salvo para o conjunto de teste (dataset/).
@@ -82,7 +84,9 @@ export default function PaginaTeste() {
           circulos: r.circulos,
           respostas: r.respostas,
           tabelaCortada: r.tabelaCortada,
+          linhasExtras: r.linhasExtras,
           aneis: r.aneis,
+          detectadas: r.detectadas,
         }
         setMedicoes((anteriores) => [...anteriores, m])
         desenharLeitura(canvas.current, r.circulos, r.grade, r.respostas)
@@ -170,7 +174,9 @@ export default function PaginaTeste() {
     ),
     ...(ultima ? [`Respostas lidas: ${textoRespostas(ultima.respostas)}`] : []),
     ...(ultima?.tabelaCortada ? ['Aviso: tabela cortada'] : []),
+    ...(ultima?.linhasExtras ? [`Aviso: ${ultima.linhasExtras} linha(s) a mais que o gabarito`] : []),
     ...(ultima ? [`Anéis por linha: ${ultima.aneis.map((a) => a.toFixed(1)).join(' ')}`] : []),
+    ...(ultima ? [`Bolinhas detectadas por linha: ${ultima.detectadas.join(' ')}`] : []),
     ...(ultima?.respostas ?? []).flatMap((r, i) =>
       r.letra === '?' || r.letra === '*'
         ? [`Dúvida Q${i + 1}: ${r.preenchimento.map((p) => p.toFixed(2)).join(' ')}`]
@@ -192,6 +198,7 @@ export default function PaginaTeste() {
           <Camera
             nQuestoes={nQuestoes}
             visivel={camera === 'visivel'}
+            exigirTroca={false}
             onFechar={() => setCamera('desligada')}
             onCapturar={(recorte) => {
               setCamera('escondida')
@@ -264,6 +271,12 @@ export default function PaginaTeste() {
             <p className="erro">
               A tabela parece estar cortada ou fora do quadro. Afaste um pouco o celular e tente de
               novo.
+            </p>
+          )}
+          {ultima.linhasExtras > 0 && (
+            <p className="erro">
+              A tabela parece ter {nQuestoes + ultima.linhasExtras} questões, e não {nQuestoes}. As
+              respostas abaixo são das {nQuestoes} primeiras linhas.
             </p>
           )}
           {ultima.respostas.length > 0 && (

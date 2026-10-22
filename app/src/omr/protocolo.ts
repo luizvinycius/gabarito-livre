@@ -30,8 +30,14 @@ export type Resposta =
       // alguma linha escolhida não parece ser da tabela: provavelmente ela
       // ficou cortada; todas as respostas vêm como '?'
       tabelaCortada: boolean
-      // pontuação de anel (0 a 5) de cada linha, para diagnóstico
+      // linhas de bolinhas fora das escolhidas: a tabela tem mais questões
+      // que o gabarito. As respostas vêm lidas (das primeiras linhas), mas o
+      // app pede para o professor conferir antes de dar a nota.
+      linhasExtras: number
+      // pontuação de anel (0 a 5) e bolinhas detectadas de cada linha, para
+      // diagnóstico
       aneis: number[]
+      detectadas: number[]
       respostas: RespostaLida[]
     }
   | { tipo: 'erro'; mensagem: string }

@@ -44,9 +44,17 @@ describe('corrigir', () => {
     expect(c.questoes[4].final).toBe('X')
   })
 
-  it('ignora confirmação de questão que não estava em dúvida', () => {
+  it('deixa o professor corrigir uma questão lida sem dúvida', () => {
     const c = corrigir(gabarito, [...'BABCDACC'], { 0: 'E' })
-    expect(c.questoes[0].final).toBe('B')
+    expect(c.questoes[0].final).toBe('E')
+    expect(c.questoes[0].alterada).toBe(true)
+    expect(c.questoes[1].alterada).toBe(false)
+    expect(c.acertos).toBe(7)
+  })
+
+  it('não marca como alterada a confirmação de uma dúvida', () => {
+    const c = corrigir(gabarito, [...'?ABCDACC'], { 0: 'B' })
+    expect(c.questoes[0].alterada).toBe(false)
   })
 
   it('trata tabela não encontrada como tudo em dúvida', () => {

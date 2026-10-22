@@ -5,6 +5,11 @@
 // Uso (dentro de app/):
 //   npm run avaliar
 //   npm run avaliar -- --csv outro.csv --fotos outra/pasta
+//   npm run avaliar -- --conjunto sinteticas   (dataset/sinteticas/, do poc/gerar_sinteticas.py)
+//
+// Folhas com linhas a mais que o gabarito contam como '?' em todas as
+// questões: o app lê as primeiras linhas, mas pede para o professor conferir
+// antes de dar a nota (no Python, a leitura já devolve '?').
 //
 // Diferença para o app no celular: aqui a foto é reduzida direto do tamanho
 // original com o INTER_AREA do OpenCV, como no Python. No celular, o canvas
@@ -26,13 +31,16 @@ const LARGURA_RECORTE = 800
 type Folha = { arquivo: string; n: number; respostas: string; celular: string; condicoes: string[] }
 type Classe = 'certa' | 'aviso' | 'silenciosa'
 
-// Igual ao classificar() do avaliar.py.
+// Igual ao classificar() do avaliar.py. Esperada '?': o app tem de pedir
+// confirmação (tabela cortada, linhas a mais). Lida '-': tabela não
+// encontrada, que o app avisa.
 function classificar(esperada: string, lida: string): Classe {
   const letra = 'ABCDE'.includes(lida) && lida !== ''
+  if (esperada === '?') return letra ? 'silenciosa' : 'certa'
   if (esperada === '_') return lida === '?' ? 'certa' : letra ? 'silenciosa' : 'aviso'
   if (esperada === '*') return lida === '*' ? 'certa' : letra ? 'silenciosa' : 'aviso'
   if (lida === esperada) return 'certa'
-  return lida === '?' || lida === '*' ? 'aviso' : 'silenciosa'
+  return lida === '?' || lida === '*' || lida === '-' ? 'aviso' : 'silenciosa'
 }
 
 // CSV simples (sem aspas), como o do dataset/.
@@ -51,8 +59,8 @@ function lerCsv(caminho: string): { folhas: Folha[]; problemas: string[] } {
     const n = Number.parseInt(v('n_questoes'))
     const respostas = v('respostas').toUpperCase()
     if (!Number.isInteger(n)) problemas.push(`linha ${i + 2}: n_questoes inválido`)
-    else if (respostas.length !== n || /[^ABCDE_*]/.test(respostas))
-      problemas.push(`linha ${i + 2} (${arquivo}): respostas "${respostas}" não batem com ${n} questões A-E/_/*`)
+    else if (respostas.length !== n || /[^ABCDE_*?]/.test(respostas))
+      problemas.push(`linha ${i + 2} (${arquivo}): respostas "${respostas}" não batem com ${n} questões A-E/_/*/?`)
     else
       folhas.push({
         arquivo,
@@ -75,8 +83,10 @@ async function main() {
     const i = args.indexOf(nome)
     return i >= 0 && args[i + 1] ? resolve(args[i + 1]) : padrao
   }
-  const csv = opcao('--csv', join(RAIZ, 'dataset', 'respostas.csv'))
-  const pastaFotos = opcao('--fotos', join(RAIZ, 'dataset', 'fotos'))
+  const iConjunto = args.indexOf('--conjunto')
+  const pasta = iConjunto >= 0 && args[iConjunto + 1] ? join(RAIZ, 'dataset', args[iConjunto + 1]) : join(RAIZ, 'dataset')
+  const csv = opcao('--csv', join(pasta, 'respostas.csv'))
+  const pastaFotos = opcao('--fotos', join(pasta, 'fotos'))
 
   const { folhas, problemas } = lerCsv(csv)
   for (const p of problemas) console.log('AVISO no CSV:', p)
@@ -108,12 +118,22 @@ async function main() {
     const pixels = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
     const largura = folha.arquivo.startsWith('recorte-') ? LARGURA_RECORTE : LARGURA_FOLHA
     const t0 = performance.now()
-    const r = processar(cv, info.width, info.height, pixels, folha.n, largura)
+    let r: ReturnType<typeof processar>
+    try {
+      r = processar(cv, info.width, info.height, pixels, folha.n, largura)
+    } catch (err) {
+      // no app, o worker devolve o erro e a tela mostra "Não consegui ler"
+      r = { tipo: 'erro', mensagem: err instanceof Error ? err.message : String(err) }
+    }
     tempos.push(performance.now() - t0)
-    if (r.tipo !== 'resultado') throw new Error(`resposta inesperada em ${folha.arquivo}`)
+    if (r.tipo === 'erro') console.log(`   ERRO em ${folha.arquivo}: ${r.mensagem}`)
+    if (r.tipo === 'pronto') throw new Error(`resposta inesperada em ${folha.arquivo}`)
+    if (r.tipo === 'erro') r = { tipo: 'resultado', tempos: {}, total: 0, contornos: 0, circulos: [], grade: null, tabelaCortada: false, linhasExtras: 0, aneis: [], detectadas: [], respostas: [] }
 
-    // '-': tabela não encontrada
-    const lido = r.respostas.map((x) => x.letra).join('') || '-'.repeat(folha.n)
+    // '-': tabela não encontrada; linhas a mais: o app pede para conferir
+    const lido = r.linhasExtras
+      ? '?'.repeat(folha.n)
+      : r.respostas.map((x) => x.letra).join('') || '-'.repeat(folha.n)
     const classes = [...folha.respostas].map((e, i) => classificar(e, lido[i]))
     const grupos = [`celular: ${folha.celular}`, ...folha.condicoes.map((c) => `condição: ${c}`)]
     classes.forEach((c, i) => {

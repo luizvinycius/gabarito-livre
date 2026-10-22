@@ -61,7 +61,15 @@ function ajustar(obs: Obs[], z: (o: Obs) => number): [number, number, number] {
 type Obs = { linha: number; coluna: number; x: number; y: number }
 
 // aneis: pontuação de anel (0 a 5) de cada linha escolhida
-export type Grade = { linhas: Circulo[][]; aneis: number[]; raio: number }
+// detectadas: bolinhas detectadas em cada linha escolhida (0 a 5)
+// linhasExtras: linhas de bolinhas logo acima ou abaixo do bloco escolhido
+export type Grade = {
+  linhas: Circulo[][]
+  aneis: number[]
+  detectadas: number[]
+  linhasExtras: number
+  raio: number
+}
 
 // Pontuação mínima de anel (0 a 5) de cada linha escolhida. Nas fotos de
 // teste, todas as linhas da tabela tiraram 5,0 e as de fora no máximo 3,6.
@@ -69,6 +77,24 @@ export type Grade = { linhas: Circulo[][]; aneis: number[]; raio: number }
 // e a grade pode estar deslocada: todas as respostas viram '?'.
 // TODO: recalibrar com o conjunto de fotos (poc/avaliar.py).
 export const ANEL_MINIMO = 4.3
+
+// A pontuação de anel não basta no modelo compacto (grade grossa): lá as
+// linhas de "DISSERTATIVA" e o cabeçalho tiram até 5,0. O que separa uma linha
+// de bolinhas de uma linha de texto é ter bolinhas detectadas: nas fotos e no
+// conjunto sintético, as linhas da tabela costumam ter de 2 a 5 e as de fora,
+// 0 (uma linha do meio pode ficar com 0 quando as bolinhas não formam uma
+// cadeia de 3). Linha vizinha ao bloco com anel alto e ao menos
+// DETECTADAS_EXTRA bolinhas: a tabela tem mais linhas que o gabarito.
+export const DETECTADAS_EXTRA = 2
+
+/**
+ * Tabela cortada ou grade deslocada: alguma linha com anel baixo, ou a
+ * primeira ou a última linha sem nenhuma bolinha detectada (o bloco
+ * provavelmente escorregou para uma linha de texto).
+ */
+export function gradeSuspeita({ aneis, detectadas }: Grade): boolean {
+  return aneis.some((a) => a < ANEL_MINIMO) || detectadas[0] === 0 || detectadas.at(-1) === 0
+}
 
 /**
  * Estima a grade (nQuestoes linhas × 5 colunas) a partir das bolinhas
@@ -157,9 +183,16 @@ export function agruparLinhas(
   }
   if (obs.length < 3) return null
 
-  // 9. ajuste afim (linha, coluna) → (x, y), descartando pontos fora do padrão
-  let cx = ajustar(obs, (o) => o.x)
-  let cy = ajustar(obs, (o) => o.y)
+  // 9. ajuste afim (linha, coluna) → (x, y), descartando pontos fora do padrão.
+  // Com tudo numa linha ou numa coluna só, não dá para estimar a grade.
+  let cx: [number, number, number]
+  let cy: [number, number, number]
+  try {
+    cx = ajustar(obs, (o) => o.x)
+    cy = ajustar(obs, (o) => o.y)
+  } catch {
+    return null
+  }
   const prever = (c: [number, number, number], coluna: number, linha: number) =>
     c[0] + c[1] * coluna + c[2] * linha
   for (let it = 0; it < 3; it++) {
@@ -171,8 +204,12 @@ export function agruparLinhas(
     if (manter.length === obs.length) break
     obs = manter
     if (obs.length < 3) return null
-    cx = ajustar(obs, (o) => o.x)
-    cy = ajustar(obs, (o) => o.y)
+    try {
+      cx = ajustar(obs, (o) => o.x)
+      cy = ajustar(obs, (o) => o.y)
+    } catch {
+      return null
+    }
   }
 
   // 10. o professor já informou quantas questões há: escolhe as nQuestoes
@@ -213,8 +250,27 @@ export function agruparLinhas(
     }
   }
   if (s0 === null) return null
-  const escolhidas = Array.from({ length: nQuestoes }, (_, j) => candidatas.get(s0 + j)!)
-  return { linhas: escolhidas.map((c) => c.pos), aneis: escolhidas.map((c) => c.anel), raio: rmed }
+
+  // Linhas de bolinhas logo acima ou logo abaixo do bloco: a tabela tem mais
+  // linhas que o gabarito (ex.: folha de 10 questões com gabarito de 8). Aí a
+  // questão 1 é a primeira linha da tabela: o bloco sobe até ela.
+  const temBolinhas = (linha: number) => {
+    const c = candidatas.get(linha)
+    return !!c && c.anel >= ANEL_MINIMO && c.det >= DETECTADAS_EXTRA
+  }
+  let inicio = s0
+  while (temBolinhas(inicio - 1)) inicio--
+  let linhasExtras = 0
+  for (let l = inicio + nQuestoes; temBolinhas(l); l++) linhasExtras++
+  const escolhidas = Array.from({ length: nQuestoes }, (_, j) => candidatas.get(inicio + j)!)
+
+  return {
+    linhas: escolhidas.map((c) => c.pos),
+    aneis: escolhidas.map((c) => c.anel),
+    detectadas: escolhidas.map((c) => c.det),
+    linhasExtras,
+    raio: rmed,
+  }
 }
 
 /**

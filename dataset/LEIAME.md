@@ -33,7 +33,7 @@ O coordenador então:
    ```
 
 ## O CSV
-- `respostas`: o que está **marcado na folha**, não o que o app leu. `_` = em branco, `*` = duas marcadas.
+- `respostas`: o que está **marcado na folha**, não o que o app leu. `_` = em branco, `*` = duas marcadas. (`?` = o app tem de pedir confirmação; só o conjunto sintético usa.)
 - `condicao`: itens separados por `;`. Use sempre os mesmos nomes (`caneta azul`, `caneta preta`, `lapis`, `forte`, `fraca`, `rabiscada`, `borracha`, `em branco`, `dupla`, `luz boa`, `sombra`, `luz amarela`, `perto`, `longe`, `torta`), para o relatório agrupar direito.
 - Arquivos que começam com `recorte-` são lidos como recorte (800 px); os outros, como folha inteira (1000 px).
 
@@ -43,3 +43,6 @@ python poc/avaliar.py              # algoritmo do protótipo em Python
 cd app && npm run avaliar          # algoritmo do app, no Node
 ```
 Os dois devem dar o mesmo resultado.
+
+## Conjunto sintético
+Enquanto as fotos não chegam, `python poc/gerar_sinteticas.py` gera em `dataset/sinteticas/` (fora do Git) 89 imagens desenhadas a partir da folha de teste, com caneta, lápis, borracha, sombra, luz amarela, foto torta, recortes deslocados e cortados e tabelas com linhas a mais. Para medir: `python poc/avaliar.py --conjunto sinteticas` e `cd app && npm run avaliar -- --conjunto sinteticas`. Não substitui as fotos reais.

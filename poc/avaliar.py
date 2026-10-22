@@ -8,12 +8,14 @@ Uso:
     python poc/avaliar.py
     python poc/avaliar.py --depurar          # salva as imagens das folhas com problema
     python poc/avaliar.py --csv outro.csv --fotos outra/pasta
+    python poc/avaliar.py --conjunto sinteticas   # dataset/sinteticas/ (gerar_sinteticas.py)
 
 Formato do CSV:
     arquivo,n_questoes,respostas,celular,condicao
     ana_01.jpg,8,BABCDACC,iPhone 12,caneta azul; luz boa
     recorte-8q-20261018-215723.jpg,8,A_BCD*CC,Moto G,lapis; Q2 em branco; Q6 dupla
-  respostas: uma letra por questão; _ = em branco, * = duas marcadas.
+  respostas: uma letra por questão; _ = em branco, * = duas marcadas,
+  ? = o app tem de pedir confirmação (tabela cortada, linhas a mais).
   Arquivos que começam com "recorte-" foram salvos pelo app (só a tabela) e
   são lidos a 800 px, como no app; os demais são a folha inteira (1000 px).
 
@@ -39,15 +41,18 @@ LARGURA_RECORTE = 800
 def classificar(esperada, lida):
     """Classifica uma questão:
     'certa'      -> leu o esperado (em branco esperado e lido '?' também conta);
-    'aviso'      -> o app pediu confirmação ('?' ou '*') e o professor corrige;
+    'aviso'      -> o app pediu confirmação ('?' ou '*') ou não achou a
+                    tabela ('-'), e o professor corrige;
     'silenciosa' -> o app mostrou uma letra errada sem avisar."""
+    if esperada == '?':
+        return 'silenciosa' if lida in 'ABCDE' else 'certa'
     if esperada == '_':
         return 'certa' if lida == '?' else 'silenciosa' if lida in 'ABCDE' else 'aviso'
     if esperada == '*':
         return 'certa' if lida == '*' else 'silenciosa' if lida in 'ABCDE' else 'aviso'
     if lida == esperada:
         return 'certa'
-    return 'aviso' if lida in '?*' else 'silenciosa'
+    return 'aviso' if lida in '?*-' else 'silenciosa'
 
 
 def ler_csv(caminho):
@@ -63,8 +68,8 @@ def ler_csv(caminho):
                 problemas.append(f'linha {i}: n_questoes inválido')
                 continue
             resp = (linha.get('respostas') or '').strip().upper()
-            if len(resp) != n or any(c not in 'ABCDE_*' for c in resp):
-                problemas.append(f'linha {i} ({arquivo}): respostas "{resp}" não batem com {n} questões A-E/_/*')
+            if len(resp) != n or any(c not in 'ABCDE_*?' for c in resp):
+                problemas.append(f'linha {i} ({arquivo}): respostas "{resp}" não batem com {n} questões A-E/_/*/?')
                 continue
             condicoes = [c.strip().lower() for c in (linha.get('condicao') or '').split(';') if c.strip()]
             linhas.append({
@@ -83,11 +88,16 @@ def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8')
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--csv', default=os.path.join(RAIZ, 'dataset', 'respostas.csv'))
-    ap.add_argument('--fotos', default=os.path.join(RAIZ, 'dataset', 'fotos'))
+    ap.add_argument('--conjunto', metavar='NOME',
+                    help='pasta dentro de dataset/ com respostas.csv e fotos/ (ex.: sinteticas)')
+    ap.add_argument('--csv')
+    ap.add_argument('--fotos')
     ap.add_argument('--depurar', nargs='?', const=os.path.join(AQUI, 'saida'), metavar='PASTA',
                     help='salva a imagem de depuração das folhas com aviso ou erro (padrão: poc/saida/)')
     args = ap.parse_args()
+    pasta = os.path.join(RAIZ, 'dataset', args.conjunto) if args.conjunto else os.path.join(RAIZ, 'dataset')
+    args.csv = args.csv or os.path.join(pasta, 'respostas.csv')
+    args.fotos = args.fotos or os.path.join(pasta, 'fotos')
 
     folhas, problemas = ler_csv(args.csv)
     for p in problemas:

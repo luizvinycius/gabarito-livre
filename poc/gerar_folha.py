@@ -40,7 +40,9 @@ def texto_centro(page, cx, cy, s, tam, fonte="helv"):
 
 
 def folha(page, x, y, largura, n, estilo=CLASSICO, valor=None, dissertativas=()):
-    """Desenha títulos, campo de código e tabela a partir de (x, y)."""
+    """Desenha títulos, campo de código e tabela a partir de (x, y).
+    Devolve o retângulo da tabela e o centro e o raio de cada bolinha, em
+    pontos (o gerar_sinteticas.py usa para saber onde pintar)."""
     w = largura * MM
     t = largura / 95 * 10  # tamanho dos títulos acompanha a escala
     page.insert_text((x, y + t), "FOLHA DE RESPOSTAS", fontname="hebo", fontsize=t)
@@ -83,18 +85,21 @@ def folha(page, x, y, largura, n, estilo=CLASSICO, valor=None, dissertativas=())
         return f"{s} ({v})" if v else s
 
     tam_rotulo = hl * (0.5 if compacto else 0.42)
+    bolinhas = []
     for i in range(n):
         cy = y + hc + (i + 0.5) * hl
         texto_centro(page, x + qw / 2, cy, rotulo(i, valor), tam_rotulo, "hebo")
+        bolinhas.append([])
         for j, letra in enumerate("ABCDE"):
             cx = x + qw + (j + 0.5) * aw
             page.draw_circle((cx, cy), r, color=PRETO, width=max(0.45, r * 0.09))
             texto_centro(page, cx, cy, letra, r * (1.4 if compacto else 1.25))
+            bolinhas[-1].append((cx, cy, r))
     for k, v in enumerate(dissertativas):
         cy = y + hc + (n + k + 0.5) * hl
         texto_centro(page, x + qw / 2, cy, rotulo(n + k, v), tam_rotulo, "hebo")
         texto_centro(page, x + qw + (w - qw) / 2, cy, "****DISSERTATIVA****", hl * 0.5)
-    return y + alto
+    return {"tabela": pymupdf.Rect(x, y, x + w, y + alto), "linha": hl, "bolinhas": bolinhas}
 
 
 def pagina(doc, tabelas, rodape):

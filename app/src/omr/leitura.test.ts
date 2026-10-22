@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Circulo } from './protocolo'
-import { agruparLinhas, decidir } from './leitura'
+import { agruparLinhas, decidir, gradeSuspeita } from './leitura'
 
 describe('decidir', () => {
   it('lê a letra quando uma bolinha se destaca', () => {
@@ -85,15 +85,59 @@ describe('agruparLinhas', () => {
     expect(g.raio).toBe(17)
   })
 
-  it('escolhe as linhas da tabela quando há linhas a mais na imagem', () => {
-    // a tabela tem 10 linhas, mas o gabarito tem 8: fica com o bloco de 8
-    // linhas com mais evidência, sem inventar linhas fora da tabela
+  it('avisa quando a tabela tem mais linhas que o gabarito', () => {
+    // a tabela tem 10 linhas, mas o gabarito tem 8: fica com as 8 primeiras
+    // e conta as 2 que sobram
     const tabela = grade(10)
     const g = agruparLinhas(tabela.flat(), 8, anelDa(tabela))!
     expect(g.linhas).toHaveLength(8)
-    const primeira = tabela.findIndex((linha) => Math.abs(linha[0].y - g.linhas[0][0].y) < 1)
-    expect(primeira).toBeGreaterThanOrEqual(0)
-    expect(primeira).toBeLessThanOrEqual(2)
+    expect(g.linhas[0][0].y).toBeCloseTo(tabela[0][0].y, 0)
+    expect(g.linhasExtras).toBe(2)
+    expect(gradeSuspeita(g)).toBe(false)
+  })
+
+  it('com linhas a mais, a questão 1 é a primeira linha da tabela', () => {
+    // a primeira linha tem só 3 bolinhas detectadas (menos evidência), o que
+    // faria o bloco de maior evidência começar na segunda linha
+    const tabela = grade(10)
+    const detectados = tabela.flat().filter((_, i) => i >= 5 || i < 3)
+    const g = agruparLinhas(detectados, 8, anelDa(tabela))!
+    expect(g.linhas[0][0].y).toBeCloseTo(tabela[0][0].y, 0)
+    expect(g.linhasExtras).toBe(2)
+  })
+
+  it('não conta linhas sem bolinhas detectadas como linhas a mais', () => {
+    // modelo compacto: as linhas de "DISSERTATIVA" logo abaixo da tabela
+    // tiram anel alto, mas não têm bolinhas detectadas
+    const tabela = grade(10)
+    const objetivas = tabela.slice(0, 8)
+    const g = agruparLinhas(objetivas.flat(), 8, anelDa(tabela))!
+    expect(g.linhasExtras).toBe(0)
+    expect(g.detectadas.every((d) => d === 5)).toBe(true)
+    expect(gradeSuspeita(g)).toBe(false)
+  })
+
+  it('marca a grade como suspeita quando a ponta do bloco não tem bolinhas', () => {
+    // a questão 1 ficou fora da foto: o bloco escorrega para a linha de
+    // texto de baixo, que tem anel alto mas nenhuma bolinha detectada
+    const tabela = grade(10)
+    const visiveis = tabela.slice(1, 8)
+    const g = agruparLinhas(visiveis.flat(), 8, anelDa(tabela.slice(1)))!
+    expect(g.detectadas.at(-1)).toBe(0)
+    expect(gradeSuspeita(g)).toBe(true)
+  })
+
+  it('aceita uma linha do meio sem bolinhas detectadas', () => {
+    const tabela = grade(8)
+    const detectados = tabela.filter((_, l) => l !== 3).flat()
+    const g = agruparLinhas(detectados, 8, anelDa(tabela))!
+    expect(g.detectadas[3]).toBe(0)
+    expect(gradeSuspeita(g)).toBe(false)
+  })
+
+  it('devolve null quando as bolinhas estão todas numa linha só', () => {
+    const tabela = grade(1)
+    expect(agruparLinhas(tabela.flat(), 8, anelDa(tabela))).toBeNull()
   })
 
   it('marca anel baixo quando a tabela está cortada', () => {
@@ -102,6 +146,7 @@ describe('agruparLinhas', () => {
     const tabela = grade(6)
     const g = agruparLinhas(tabela.flat(), 8, anelDa(tabela))!
     expect(g.aneis.some((a) => a < 4.3)).toBe(true)
+    expect(gradeSuspeita(g)).toBe(true)
   })
 
   it('aguenta uma folha um pouco torta', () => {

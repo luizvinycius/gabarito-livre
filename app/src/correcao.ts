@@ -10,8 +10,9 @@ export type Gabarito = {
   valores: number[]
 }
 
-// O que o professor decidiu numa questão em dúvida: a letra marcada pelo
-// aluno ou 'X' (em branco, duas marcadas ou ilegível: não vale ponto).
+// O que o professor decidiu numa questão: a letra marcada pelo aluno ou 'X'
+// (em branco, duas marcadas ou ilegível: não vale ponto). Vale para as
+// questões em dúvida e também para corrigir uma leitura errada.
 export type Confirmacao = string
 
 export type Questao = {
@@ -22,6 +23,8 @@ export type Questao = {
   // a letra que vale para a nota: a lida ou a confirmada pelo professor;
   // null enquanto a dúvida não foi confirmada
   final: string | null
+  // o professor trocou uma letra que o app tinha lido sem dúvida
+  alterada: boolean
   certa: boolean
   valor: number
 }
@@ -57,7 +60,7 @@ export function redimensionar(g: Gabarito, nQuestoes: number): Gabarito {
 
 // Divide um total igualmente entre as questões, com duas casas decimais. O
 // arredondamento vai para a última questão, para a soma bater com o total.
-export function distribuir(g: Gabarito, total: number): Gabarito {
+export function distribuir<G extends Gabarito>(g: G, total: number): G {
   const n = g.letras.length
   const cada = Math.floor((total / n) * 100) / 100
   const valores = Array(n).fill(cada)
@@ -81,8 +84,9 @@ export function corrigir(
 ): Correcao {
   const questoes = g.letras.map((correta, i): Questao => {
     const lida = lidas[i] ?? '?'
-    const final = duvida(lida) ? (confirmacoes[i] ?? null) : lida
-    return { numero: i + 1, correta, lida, final, certa: final === correta, valor: g.valores[i] }
+    const final = confirmacoes[i] ?? (duvida(lida) ? null : lida)
+    const alterada = !duvida(lida) && final !== lida
+    return { numero: i + 1, correta, lida, final, alterada, certa: final === correta, valor: g.valores[i] }
   })
   return {
     questoes,
