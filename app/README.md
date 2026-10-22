@@ -10,6 +10,7 @@ A **página de teste da leitura** (seção 8.5) continua no endereço com `#test
 | `src/correcao.ts` | nota, acertos e confirmações (testado no Vitest) |
 | `src/sessao.ts` | gabaritos salvos, folhas da turma e o que fica no aparelho (testado no Vitest) |
 | `src/fotos.ts` | fotos das folhas no IndexedDB |
+| `src/arquivo.ts` | entrega um arquivo (planilha, recorte): compartilha no celular, baixa no computador |
 | `src/Camera.tsx`, `src/captura.ts` | câmera com quadro-guia e as regras da captura automática |
 | `src/omr/` | a leitura: `processar.ts` (OpenCV), `leitura.ts` (grade e decisão), `worker.ts`, `useLeitor.ts` |
 | `scripts/avaliar.ts` | `npm run avaliar`: precisão do código do app no `dataset/` |

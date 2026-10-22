@@ -9,7 +9,8 @@ Atualizado em 21/10/2026. O contexto de cada item está na [documentação do pr
 - **Linhas a mais e tabela que escorrega (1):** regra das bolinhas detectadas por linha (3.4, passo 10). Avisa quando a tabela tem mais linhas que o gabarito (e a Q1 passa a ser a primeira linha da tabela) e quando o bloco escorrega para uma linha de "DISSERTATIVA" no modelo compacto, que antes dava nota errada sem aviso.
 - **Conjunto sintético (2):** `poc/gerar_sinteticas.py`, 89 imagens (3.7). **0 erro silencioso** no Python e no app, com leituras idênticas nas duas implementações. Achou a limitação da luz muito amarela (3.6).
 - **README para usuários (6):** como usar, instalar, dicas de foto e perguntas frequentes.
-- **Testes Vitest:** 50 (leitura, correção, sessão e captura automática).
+- **Testes Vitest:** 53 (leitura, correção, sessão, exportação e captura automática).
+- **Depois dos 6 itens (aguardando aprovação para o commit):** acerto por questão na turma (as que a maioria errou em vermelho); planilha CSV das notas (Excel em português) e "Copiar as notas"; tela sempre acesa com a câmera ligada (Wake Lock); botões duplicados escondidos nos avisos do resultado; workflow `leitura.yml` que mede o conjunto sintético no Python e no app a cada mudança no leitor e falha com erro silencioso ou leituras diferentes (`--leituras` nos dois avaliadores).
 
 ### Antes (21/10, tarde)
 - **App do professor pronto para testar (MVP da semana 2):** gabarito (letra e valor de cada questão, soma, dividir um total) → câmera → resultado (nota, acertos, resposta lida, desenho da leitura sobre a foto) → próxima folha. As questões `?`/`*` e a tabela cortada pedem confirmação com um toque, e o gabarito fica salvo no aparelho. Testado no Chrome do PC com as 2 fotos de referência; **falta testar no iPhone e no A32.**

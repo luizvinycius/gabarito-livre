@@ -14,6 +14,7 @@ import {
   pixelsParaLeitura,
 } from '../omr/imagem'
 import Camera from '../Camera'
+import { entregarArquivo } from '../arquivo'
 
 function textoRespostas(respostas: RespostaLida[]) {
   return respostas.length ? respostas.map((r) => r.letra).join('') : '(tabela não encontrada)'
@@ -130,27 +131,13 @@ export default function PaginaTeste() {
     rodar()
   }
 
-  // No celular, compartilhar abre a folha do sistema (no iPhone dá para
-  // "Salvar imagem"); no computador, ou onde não houver, baixa o arquivo.
   async function salvarRecorte() {
     if (!arquivoRecorte) return
-    const celular = matchMedia('(pointer: coarse)').matches
-    if (celular && navigator.canShare?.({ files: [arquivoRecorte] })) {
-      try {
-        await navigator.share({ files: [arquivoRecorte] })
-      } catch (err) {
-        if (!(err instanceof DOMException && err.name === 'AbortError')) {
-          setErro(`Não consegui salvar: ${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
-      return
+    try {
+      await entregarArquivo(arquivoRecorte)
+    } catch (err) {
+      setErro(`Não consegui salvar: ${err instanceof Error ? err.message : String(err)}`)
     }
-    const url = URL.createObjectURL(arquivoRecorte)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = arquivoRecorte.name
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 10000)
   }
 
   async function escolherFoto(arquivo: File | undefined) {

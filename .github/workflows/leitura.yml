@@ -1,0 +1,61 @@
+# Mede a leitura a cada mudança no leitor: gera o conjunto sintético, roda
+# o avaliador do Python e o do app e confere que não há erro silencioso e
+# que as duas implementações leram exatamente o mesmo em cada imagem
+# (seções 3.6 e 3.7 da documentação). Não bloqueia o deploy.
+name: Leitura (conjunto sintético)
+
+on:
+  push:
+    branches: [main]
+    paths: [poc/**, app/src/omr/**, app/scripts/**, dataset/**, app/package-lock.json, .github/workflows/leitura.yml]
+  pull_request:
+    paths: [poc/**, app/src/omr/**, app/scripts/**, dataset/**, app/package-lock.json, .github/workflows/leitura.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  avaliar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      # as mesmas versões usadas para calibrar (a leitura muda com detalhes mínimos)
+      - run: pip install opencv-python-headless==5.0.0.93 numpy==2.5.3 pymupdf==1.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+
+      - name: Gerar o conjunto sintético
+        run: python poc/gerar_sinteticas.py
+
+      # sai com erro se houver erro silencioso; o próximo passo roda mesmo
+      # assim, para mostrar também se as implementações divergiram
+      - name: Medir no Python
+        run: python poc/avaliar.py --conjunto sinteticas --leituras py.csv
+      - name: Medir no app
+        if: ${{ !cancelled() }}
+        run: npm run avaliar -- --conjunto sinteticas --leituras ../ts.csv
+        working-directory: app
+
+      - name: Conferir que as duas implementações leram o mesmo
+        if: ${{ !cancelled() }}
+        run: |
+          if ! diff py.csv ts.csv; then
+            echo "::error::Python e app leram diferente (linhas acima). As duas implementações deixaram de ser iguais."
+            exit 1
+          fi
+          echo "Leituras iguais em $(wc -l < py.csv) imagens."
+
+      - name: Fotos reais do dataset/
+        if: ${{ !cancelled() }}
+        run: |
+          python poc/avaliar.py
+          cd app && npm run avaliar

@@ -110,6 +110,32 @@ export default function Camera({ nQuestoes, visivel, exigirTroca, analisar, onCa
     }
   }, [])
 
+  // Tela sempre acesa enquanto a câmera estiver ligada (a correção inteira,
+  // já que a câmera só fica escondida entre uma folha e outra): o celular
+  // não apaga enquanto o professor troca as folhas. O navegador solta a
+  // trava quando a aba sai da frente; ao voltar, pede de novo.
+  useEffect(() => {
+    let trava: WakeLockSentinel | null = null
+    let ativo = true
+    const pedir = async () => {
+      if (document.visibilityState !== 'visible' || !('wakeLock' in navigator)) return
+      try {
+        const nova = await navigator.wakeLock.request('screen')
+        if (ativo) trava = nova
+        else void nova.release()
+      } catch {
+        // sem permissão ou sem bateria: segue sem a trava
+      }
+    }
+    void pedir()
+    document.addEventListener('visibilitychange', pedir)
+    return () => {
+      ativo = false
+      document.removeEventListener('visibilitychange', pedir)
+      void trava?.release()
+    }
+  }, [])
+
   // O Safari pausa o vídeo escondido; ao mostrar de novo, retoma. Ao abrir
   // para a próxima folha, a captura automática espera a troca da folha.
   useEffect(() => {

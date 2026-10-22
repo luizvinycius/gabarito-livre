@@ -12,9 +12,10 @@ Corrige a parte objetiva da prova pela câmera do celular, **de graça e sem int
 3. **Segure firme.** Com a captura automática ligada, a foto é tirada sozinha quando a tabela encaixa. Também dá para tocar em "📸 Capturar" ou escolher uma foto da galeria.
 4. **Confira o resultado:** a nota, os acertos e o que o app leu em cada questão. As questões em dúvida (em branco, duas marcadas ou marcação fraca) aparecem em vermelho: toque na letra que o aluno marcou, ou em "Nenhuma". Se o app leu alguma letra errada, toque na questão para corrigir. Se quiser, escreva o nome ou o número do aluno.
 5. **Toque em "Próxima folha"** e siga para a próxima prova. A câmera espera você trocar a folha antes de tirar a próxima foto.
-6. **Veja a turma** a qualquer momento (botão "Turma" no alto): a nota de cada folha, a média, a maior e a menor nota. Toque numa folha para rever a leitura sobre a foto ou corrigir uma questão. Ao terminar, "Encerrar a sessão" apaga as folhas do celular (os gabaritos continuam salvos).
+6. **Veja a turma** a qualquer momento (botão "Turma" no alto): a nota de cada folha, a média, a maior e a menor nota, e quantas folhas acertaram cada questão (as que a maioria errou ficam em vermelho). Toque numa folha para rever a leitura sobre a foto ou corrigir uma questão.
+7. **Leve as notas para a planilha:** "Baixar planilha (CSV)" gera um arquivo que abre no Excel ou no Google Planilhas, com a nota e a letra de cada questão; "Copiar as notas" copia uma linha por folha para colar onde quiser. Ao terminar, "Encerrar a sessão" apaga as folhas do celular (os gabaritos continuam salvos).
 
-Se você corrigir uma letra do gabarito no meio da correção, as notas das folhas já corrigidas são recalculadas.
+Se você corrigir uma letra do gabarito no meio da correção, as notas das folhas já corrigidas são recalculadas. Enquanto a câmera estiver ligada, a tela do celular não apaga sozinha.
 
 ## Instalar como app
 Não precisa de loja de aplicativos. Depois de instalado, o app abre sem internet.
@@ -51,6 +52,8 @@ Para testar, há uma [folha de respostas para imprimir](dataset/folha-de-respost
 **A tabela tem mais questões que o gabarito. E agora?** O app avisa. Você pode ajustar o gabarito, tirar outra foto ou corrigir só as primeiras questões.
 
 **Tenho provas A e B.** Cadastre um gabarito para cada uma (ou use "Duplicar" e mude só as letras) e troque o gabarito antes de corrigir as folhas de cada tipo. A lista da turma mostra qual gabarito foi usado em cada folha.
+
+**Como passo as notas para o AVA ou para a planilha da turma?** Na tela da turma, "Baixar planilha (CSV)" ou "Copiar as notas". Se você escreveu o nome ou o número do aluno em cada folha, ele vai junto.
 
 **E as questões dissertativas?** O app corrige só a parte objetiva. A nota das dissertativas continua com o professor.
 

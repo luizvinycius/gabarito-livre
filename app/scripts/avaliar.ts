@@ -6,6 +6,7 @@
 //   npm run avaliar
 //   npm run avaliar -- --csv outro.csv --fotos outra/pasta
 //   npm run avaliar -- --conjunto sinteticas   (dataset/sinteticas/, do poc/gerar_sinteticas.py)
+//   npm run avaliar -- --leituras ts.csv       (grava "arquivo;lido" de cada folha)
 //
 // Folhas com linhas a mais que o gabarito contam como '?' em todas as
 // questões: o app lê as primeiras linhas, mas pede para o professor conferir
@@ -17,7 +18,7 @@
 //
 // Sai com código 1 se houver algum erro silencioso.
 
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
@@ -104,6 +105,7 @@ async function main() {
   const silenciosas: string[] = []
   const faltando: string[] = []
   const tempos: number[] = []
+  const leituras: string[] = []
   let folhasCertas = 0
 
   console.log(`${'arquivo'.padEnd(40)} ${'esperado'.padEnd(12)} ${'lido'.padEnd(12)} resultado`)
@@ -134,6 +136,7 @@ async function main() {
     const lido = r.linhasExtras
       ? '?'.repeat(folha.n)
       : r.respostas.map((x) => x.letra).join('') || '-'.repeat(folha.n)
+    leituras.push(`${folha.arquivo};${lido}`)
     const classes = [...folha.respostas].map((e, i) => classificar(e, lido[i]))
     const grupos = [`celular: ${folha.celular}`, ...folha.condicoes.map((c) => `condição: ${c}`)]
     classes.forEach((c, i) => {
@@ -162,6 +165,8 @@ async function main() {
     console.log(`${folha.arquivo.slice(0, 40).padEnd(40)} ${folha.respostas.padEnd(12)} ${lido.padEnd(12)} ${situacao}`)
   }
 
+  const iLeituras = args.indexOf('--leituras')
+  if (iLeituras >= 0 && args[iLeituras + 1]) writeFileSync(resolve(args[iLeituras + 1]), leituras.join('\n') + '\n')
   const questoes = total.certa + total.aviso + total.silenciosa
   console.log()
   console.log(`Folhas lidas: ${tempos.length} (${folhasCertas} totalmente certas)`)

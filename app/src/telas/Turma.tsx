@@ -1,10 +1,20 @@
 // A turma inteira: todas as folhas corrigidas na sessão, com a nota de cada
-// uma, a média, a maior e a menor nota. Tocar numa folha abre para rever ou
-// corrigir.
+// uma, a média, a maior e a menor nota, as questões que a turma mais errou e
+// a planilha das notas. Tocar numa folha abre para rever ou corrigir.
 
 import { useState } from 'react'
+import { entregarArquivo } from '../arquivo'
 import { formatarNota } from '../correcao'
-import { type LinhaTurma, resumir } from '../sessao'
+import { type LinhaTurma, acertoPorQuestao, notasTexto, planilhaCsv, resumir } from '../sessao'
+
+// Abaixo disto, a questão aparece destacada (a maioria errou).
+const POUCO_ACERTO = 0.5
+
+function nomeDaPlanilha() {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `notas-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.csv`
+}
 
 type Props = {
   linhas: LinhaTurma[]
@@ -20,9 +30,30 @@ function hora(ms: number) {
 export default function Turma({ linhas, onAbrir, onContinuar, onEncerrar }: Props) {
   // encerrar apaga as folhas: pede um segundo toque
   const [confirmar, setConfirmar] = useState(false)
+  const [mensagem, setMensagem] = useState<string | null>(null)
   const resumo = resumir(linhas)
-  const variosGabaritos = new Set(linhas.map((l) => l.gabarito.id)).size > 1
+  const gabaritos = [...new Map(linhas.map((l) => [l.gabarito.id, l.gabarito])).values()]
+  const variosGabaritos = gabaritos.length > 1
   const de = (total: number) => `de ${formatarNota(total)}`
+
+  async function baixarPlanilha() {
+    const arquivo = new File([planilhaCsv(linhas)], nomeDaPlanilha(), { type: 'text/csv' })
+    try {
+      await entregarArquivo(arquivo)
+      setMensagem(null)
+    } catch (err) {
+      setMensagem(`Não consegui salvar a planilha: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  async function copiarNotas() {
+    try {
+      await navigator.clipboard.writeText(notasTexto(linhas))
+      setMensagem('Notas copiadas. Cole numa planilha ou numa mensagem.')
+    } catch {
+      setMensagem('Não consegui copiar. Use "Baixar planilha".')
+    }
+  }
 
   return (
     <>
@@ -79,6 +110,52 @@ export default function Turma({ linhas, onAbrir, onContinuar, onEncerrar }: Prop
             ))}
           </ol>
           <p className="dica">Toque numa folha para rever a leitura ou corrigir uma questão.</p>
+        </section>
+      )}
+
+      {gabaritos
+        // com uma folha só, a estatística não diz nada
+        .filter((g) => linhas.filter((l) => l.gabarito.id === g.id).length > 1)
+        .map((g) => (
+          <section className="cartao" key={g.id}>
+            <h2>Acerto por questão{variosGabaritos && ` · ${g.nome}`}</h2>
+            <ol className="acerto-questoes">
+              {acertoPorQuestao(linhas, g.id).map((q) => {
+                const fracao = q.acertos / q.folhas
+                return (
+                  <li key={q.numero} className={fracao < POUCO_ACERTO ? 'pouco' : ''}>
+                    <span className="numero">{q.numero}</span>
+                    <span className="barra" aria-hidden="true">
+                      <span style={{ width: `${fracao * 100}%` }} />
+                    </span>
+                    <span className="contagem">
+                      {q.acertos}/{q.folhas} <small>({q.correta})</small>
+                    </span>
+                  </li>
+                )
+              })}
+            </ol>
+            <p className="dica">
+              Quantas folhas acertaram cada questão (entre parênteses, a resposta certa). Em vermelho, as
+              que a maioria errou: vale conferir o enunciado ou o gabarito.
+            </p>
+          </section>
+        ))}
+
+      {linhas.length > 0 && (
+        <section className="cartao">
+          <h2>Notas</h2>
+          <button className="botao secundario" onClick={baixarPlanilha}>
+            📄 Baixar planilha (CSV)
+          </button>
+          <button className="botao secundario" onClick={copiarNotas}>
+            📋 Copiar as notas
+          </button>
+          {mensagem && <p className="dica">{mensagem}</p>}
+          <p className="dica">
+            A planilha tem a nota, os acertos e a letra que valeu em cada questão, e abre no Excel ou no
+            Google Planilhas.
+          </p>
         </section>
       )}
 

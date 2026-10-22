@@ -67,7 +67,7 @@ Ideias discutidas e deixadas para depois, em ordem de afinidade com o MVP:
 
 ### 2.2 Fora do MVP
 - **Identificar o aluno.** Decisão de 16/10: alunos às vezes fazem a prova sem estar na lista da turma, o que complicaria o fluxo. Fica para uma versão futura. (Em 21/10 entrou só um campo **opcional** de texto livre na folha, sem lista da turma, para o professor achar a folha na lista se quiser.)
-- Planilha ou exportação de notas, login, nuvem, backend, dissertativas, banco de questões e integração com o AVA.
+- Login, nuvem, backend, dissertativas, banco de questões e integração com o AVA. (A exportação simples das notas, em CSV e copiando o texto, entrou em 21/10, junto com o acerto por questão.)
 
 ### 2.3 Critérios de sucesso (definir o "funciona" antes de codar)
 | Critério | Meta |
@@ -175,7 +175,7 @@ Observações:
 - **enquadramento:** o recorte do quadro-guia com a tabela deslocada de −2 a +3 linhas (tem de acertar) e cortada em cima e embaixo (tem de avisar), em 3 modelos e na foto real do modelo compacto;
 - **linhas a mais e a menos** que o gabarito (tem de avisar).
 
-No CSV, `?` na resposta esperada quer dizer "o app tem de pedir confirmação". Resultado em 21/10, igual no Python e no app: **0 erro silencioso** (antes das mudanças do dia: 19, nas linhas a mais e na foto real cortada em cima), 87% das questões certas e o resto com aviso, quase todo na luz amarela, no lápis fraco com desfoque e nas folhas que têm de avisar. A leitura de cada imagem é idêntica nas duas implementações.
+No CSV, `?` na resposta esperada quer dizer "o app tem de pedir confirmação". O workflow `.github/workflows/leitura.yml` gera o conjunto e mede nos dois a cada mudança no leitor; com `--leituras`, cada avaliador grava `arquivo;lido` de cada folha, e o workflow falha se houver erro silencioso ou se as duas leituras diferirem em alguma imagem. Resultado em 21/10, igual no Python e no app: **0 erro silencioso** (antes das mudanças do dia: 19, nas linhas a mais e na foto real cortada em cima), 87% das questões certas e o resto com aviso, quase todo na luz amarela, no lápis fraco com desfoque e nas folhas que têm de avisar. A leitura de cada imagem é idêntica nas duas implementações.
 
 ---
 

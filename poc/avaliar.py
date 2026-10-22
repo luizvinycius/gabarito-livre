@@ -9,6 +9,7 @@ Uso:
     python poc/avaliar.py --depurar          # salva as imagens das folhas com problema
     python poc/avaliar.py --csv outro.csv --fotos outra/pasta
     python poc/avaliar.py --conjunto sinteticas   # dataset/sinteticas/ (gerar_sinteticas.py)
+    python poc/avaliar.py --leituras py.csv       # grava "arquivo;lido" de cada folha
 
 Formato do CSV:
     arquivo,n_questoes,respostas,celular,condicao
@@ -92,6 +93,8 @@ def main():
                     help='pasta dentro de dataset/ com respostas.csv e fotos/ (ex.: sinteticas)')
     ap.add_argument('--csv')
     ap.add_argument('--fotos')
+    ap.add_argument('--leituras', metavar='ARQUIVO',
+                    help='grava "arquivo;lido" de cada folha (para comparar com o npm run avaliar)')
     ap.add_argument('--depurar', nargs='?', const=os.path.join(AQUI, 'saida'), metavar='PASTA',
                     help='salva a imagem de depuração das folhas com aviso ou erro (padrão: poc/saida/)')
     args = ap.parse_args()
@@ -110,7 +113,7 @@ def main():
 
     total = defaultdict(int)                       # contagem geral por classe
     por_grupo = defaultdict(lambda: defaultdict(int))  # 'celular: X' / 'condição: Y' -> classes
-    silenciosas, faltando, tempos = [], [], []
+    silenciosas, faltando, tempos, leituras = [], [], [], []
     folhas_certas = folhas_lidas = 0
 
     print(f'{"arquivo":40s} {"esperado":12s} {"lido":12s} resultado')
@@ -127,6 +130,7 @@ def main():
         folhas_lidas += 1
 
         lido = ''.join(a for _, a, _ in resultado) or '-' * folha['n']  # '-': tabela não encontrada
+        leituras.append(f'{folha["arquivo"]};{lido}')
         classes = [classificar(e, l) for e, l in zip(folha['respostas'], lido)]
         grupos = [f'celular: {folha["celular"]}'] + [f'condição: {c}' for c in folha['condicoes']]
         for qi, c in enumerate(classes, 1):
@@ -151,6 +155,9 @@ def main():
                 cv2.imwrite(os.path.join(args.depurar, os.path.splitext(folha['arquivo'])[0] + '.png'), dbg)
         print(f'{folha["arquivo"][:40]:40s} {folha["respostas"]:12s} {lido:12s} {situacao}')
 
+    if args.leituras:
+        with open(args.leituras, 'w', encoding='utf-8', newline='\n') as f:
+            f.write('\n'.join(leituras) + '\n')
     questoes = sum(total.values())
     print()
     print(f'Folhas lidas: {folhas_lidas} ({folhas_certas} totalmente certas)')

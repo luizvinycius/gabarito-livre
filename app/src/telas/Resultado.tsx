@@ -214,7 +214,8 @@ export default function Resultado({
         </section>
       )}
 
-      <section className="cartao">{acoes(pronta)}</section>
+      {/* com um aviso na tela, as saídas ficam no próprio aviso */}
+      {!naoEncontrada && !cortada && !extras && <section className="cartao">{acoes(pronta)}</section>}
 
       {foto && (
         <details className="cartao">

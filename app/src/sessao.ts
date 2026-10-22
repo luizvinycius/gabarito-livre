@@ -269,3 +269,57 @@ export function resumir(linhas: LinhaTurma[]): ResumoTurma | null {
     total: totais.size === 1 ? linhas[0].total : null,
   }
 }
+
+// ---- questões que a turma mais errou ----
+
+export type AcertoQuestao = { numero: number; correta: string; acertos: number; folhas: number }
+
+// Quantas folhas acertaram cada questão, entre as folhas de um gabarito.
+export function acertoPorQuestao(linhas: LinhaTurma[], gabaritoId: string): AcertoQuestao[] {
+  const doGabarito = linhas.filter((l) => l.gabarito.id === gabaritoId)
+  if (doGabarito.length === 0) return []
+  const g = doGabarito[0].gabarito
+  const correcoes = doGabarito.map((l) => corrigir(g, l.folha.lidas, l.folha.confirmacoes))
+  return g.letras.map((correta, i) => ({
+    numero: i + 1,
+    correta,
+    acertos: correcoes.filter((c) => c.questoes[i].certa).length,
+    folhas: doGabarito.length,
+  }))
+}
+
+// ---- exportar as notas ----
+
+// Planilha das notas, uma linha por folha, com a letra que valeu em cada
+// questão. CSV com ';' e vírgula decimal, que o Excel em português abre
+// direto (com o BOM, os acentos saem certos).
+export function planilhaCsv(linhas: LinhaTurma[]): string {
+  const maxQuestoes = Math.max(0, ...linhas.map((l) => l.questoes))
+  const campo = (v: string) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
+  const numero = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',')
+  const cabecalho = ['Folha', 'Aluno', 'Gabarito', 'Nota', 'Total', 'Acertos', 'Questões']
+  for (let i = 1; i <= maxQuestoes; i++) cabecalho.push(`Q${i}`)
+  const corpo = linhas.map((l) => {
+    const c = corrigir(l.gabarito, l.folha.lidas, l.folha.confirmacoes)
+    const letras = c.questoes.map((q) => (q.final === null ? '?' : q.final === 'X' ? '' : q.final))
+    return [
+      String(l.numero),
+      campo(l.folha.identificacao),
+      campo(l.gabarito.nome),
+      numero(l.nota),
+      numero(l.total),
+      String(l.acertos),
+      String(l.questoes),
+      ...letras,
+    ].join(';')
+  })
+  return '\uFEFF' + [cabecalho.join(';'), ...corpo].join('\r\n') + '\r\n'
+}
+
+// Texto curto para colar numa mensagem ou numa planilha (uma folha por linha).
+export function notasTexto(linhas: LinhaTurma[]): string {
+  const numero = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',')
+  return linhas
+    .map((l) => [`Folha ${l.numero}`, l.folha.identificacao, numero(l.nota)].join('\t'))
+    .join('\n')
+}

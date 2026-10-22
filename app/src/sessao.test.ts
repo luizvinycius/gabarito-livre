@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   type Estado,
+  acertoPorQuestao,
+  notasTexto,
+  planilhaCsv,
   type Folha,
   carregarEstado,
   criarGabarito,
@@ -168,5 +171,37 @@ describe('turma', () => {
     e = mudarGabarito(e, { ...gabaritoAtual(e), letras: [...'AAAAAAAA'], valores: Array(8).fill(0.5) })
     e = salvarFolha(e, folha(e, 'AAAAAAAA'))
     expect(resumir(linhasDaTurma(e))!.total).toBeNull()
+  })
+})
+
+describe('acertoPorQuestao e exportação', () => {
+  function turma() {
+    let e = comGabarito()
+    e = salvarFolha(e, folha(e, 'BABCDACC', { identificacao: 'Ana; Maria' }))
+    e = salvarFolha(e, folha(e, 'BABCDAEE'))
+    e = salvarFolha(e, folha(e, '?BBCDACC', { confirmacoes: { 0: 'X' } }))
+    return e
+  }
+
+  it('conta quantas folhas acertaram cada questão', () => {
+    const e = turma()
+    const q = acertoPorQuestao(linhasDaTurma(e), e.atual)
+    expect(q.map((x) => x.acertos)).toEqual([2, 2, 3, 3, 3, 3, 2, 2])
+    expect(q[0]).toEqual({ numero: 1, correta: 'B', acertos: 2, folhas: 3 })
+    expect(acertoPorQuestao(linhasDaTurma(e), 'outro')).toEqual([])
+  })
+
+  it('gera a planilha com vírgula decimal, aspas quando precisa e a letra que valeu', () => {
+    let e = turma()
+    e = mudarGabarito(e, { ...gabaritoAtual(e), valores: [1.5, 1, 1, 1, 1, 1, 1, 1] })
+    const linhas = planilhaCsv(linhasDaTurma(e)).replace('\uFEFF', '').trim().split('\r\n')
+    expect(linhas[0]).toBe('Folha;Aluno;Gabarito;Nota;Total;Acertos;Questões;Q1;Q2;Q3;Q4;Q5;Q6;Q7;Q8')
+    expect(linhas[1]).toBe('1;"Ana; Maria";Prova 1;8,5;8,5;8;8;B;A;B;C;D;A;C;C')
+    // Q1 confirmada como "Nenhuma": célula vazia
+    expect(linhas[3]).toBe('3;;Prova 1;6;8,5;6;8;;B;B;C;D;A;C;C')
+  })
+
+  it('gera o texto curto das notas', () => {
+    expect(notasTexto(linhasDaTurma(turma())).split('\n')[1]).toBe('Folha 2\t\t6')
   })
 })
