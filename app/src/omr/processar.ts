@@ -118,10 +118,10 @@ export function processar(
     }
     marcar('filtrar círculos')
 
-    // 11. normalizar a iluminação: a mediana larga (61 px) roda numa cópia a
-    // 1/4 do tamanho (15 px), que dá quase o mesmo fundo e é ~7x mais rápida
+    // 11. normalizar a iluminação: a mediana larga (93 px) roda numa cópia a
+    // 1/4 do tamanho (23 px), que dá quase o mesmo fundo e é ~7x mais rápida
     cv.resize(cinza, pequena, new cv.Size(Math.trunc(largura / 4), Math.trunc(altura / 4)), 0, 0, cv.INTER_AREA)
-    cv.medianBlur(pequena, pequena, 15)
+    cv.medianBlur(pequena, pequena, 23)
     cv.resize(pequena, fundo, new cv.Size(largura, altura), 0, 0, cv.INTER_LINEAR)
     marcar('normalizar iluminação')
 

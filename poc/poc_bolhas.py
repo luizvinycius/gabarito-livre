@@ -173,11 +173,11 @@ def group_rows(circles, n_q, norm):
 
 def normalize_light(gray):
     """Remove sombra/iluminação desigual: escuro relativo ao papel em volta.
-    A mediana larga (61 px) roda numa cópia a 1/4 do tamanho (15 px), que dá
+    A mediana larga (93 px) roda numa cópia a 1/4 do tamanho (23 px), que dá
     quase o mesmo fundo e é ~7x mais rápida."""
     h, w = gray.shape
     small = cv2.resize(gray, (w // 4, h // 4), interpolation=cv2.INTER_AREA)
-    bg = cv2.resize(cv2.medianBlur(small, 15), (w, h), interpolation=cv2.INTER_LINEAR).astype(float) + 1
+    bg = cv2.resize(cv2.medianBlur(small, 23), (w, h), interpolation=cv2.INTER_LINEAR).astype(float) + 1
     return np.clip(gray / bg * 255, 0, 255).astype(np.uint8)
 
 

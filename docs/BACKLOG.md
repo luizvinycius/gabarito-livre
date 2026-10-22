@@ -8,7 +8,9 @@ Atualizado em 21/10/2026. O contexto de cada item está na [documentação do pr
 - **Deploy no GitHub Pages preparado** (`.github/workflows/pages.yml`), mas ainda **não ativado**.
 - **`npm run avaliar`:** mede o código do app no Node, com o mesmo CSV do `poc/avaliar.py`. A divergência da Q8 da foto 2 foi resolvida: era a redução da imagem, não a decodificação (3.6). Hoje os dois dão o mesmo preenchimento nas 80 bolinhas.
 - **Testes Vitest:** 24 testes em `leitura.ts` e `correcao.ts`.
-- **Fotos do grupo:** mensagem para o WhatsApp pronta; `dataset/LEIAME.md` e `poc/importar.py` cobrem fotos mandadas pelo WhatsApp.
+- **Fotos do grupo:** mensagem enviada no WhatsApp; `dataset/LEIAME.md` e `poc/importar.py` cobrem as fotos que chegarem.
+- **Folha de teste para imprimir:** `dataset/folha-de-respostas-teste.pdf` (gerada por `poc/gerar_folha.py`), 12 tabelas: 6 de 8 e 6 de 10 questões. Páginas 1 e 2 no modelo das fotos de referência, em 4 tamanhos; página 3 no **modelo compacto** (grade grossa, bolinha grande, "01 (0,75)", linhas de dissertativa), com proporções diferentes em cada tabela.
+- **Correção de luz com mediana de 93 px** (era 61): no modelo compacto, a bolinha pintada cheia entre linhas grossas virava "papel" e saía mais clara que as vazias. Com 93 px: 12/12 tabelas sintéticas, as 2 fotos de referência e a foto real do modelo compacto (`dataset/fotos/univag-compacto-01.jpg`, nome riscado) certas, no Python e no app. Falta confirmar com fotos com sombra.
 
 ### Antes (18/10)
 - **Stack validada:** OpenCV.js num Web Worker funciona no Safari do iPhone 11 e no Chrome de um Galaxy A32 (3.5).

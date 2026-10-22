@@ -1,6 +1,6 @@
 # Conjunto de teste
 
-Fotos de folhas **preenchidas pelo próprio grupo**, impressas a partir do modelo. Nunca use provas reais de alunos: este repositório é público (seção 5 da documentação).
+Fotos de folhas **preenchidas pelo próprio grupo**, impressas a partir do modelo (`folha-de-respostas-teste.pdf`, gerado por `poc/gerar_folha.py`; tem o campo "Código" para o `LV-01`). Nunca use provas reais de alunos: este repositório é público (seção 5 da documentação). A única exceção é `univag-compacto-01.jpg`, prova do próprio coordenador, publicada com autorização e com o nome riscado.
 
 Há dois jeitos de contribuir. O mais simples é mandar as fotos para o coordenador; quem tiver o app aberto no celular pode salvar o recorte.
 
