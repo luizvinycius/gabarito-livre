@@ -5,7 +5,7 @@ Atualizado em 21/10/2026. O contexto de cada item está na [documentação do pr
 ## Onde paramos (21/10)
 - **App do professor pronto para testar (MVP da semana 2):** gabarito (letra e valor de cada questão, soma, dividir um total) → câmera → resultado (nota, acertos, resposta lida, desenho da leitura sobre a foto) → próxima folha. As questões `?`/`*` e a tabela cortada pedem confirmação com um toque, e o gabarito fica salvo no aparelho. Testado no Chrome do PC com as 2 fotos de referência; **falta testar no iPhone e no A32.**
 - **PWA:** instalável e offline (o OpenCV fica em cache). Testado no Chrome do PC.
-- **Deploy no GitHub Pages preparado** (`.github/workflows/pages.yml`), mas ainda **não ativado**.
+- **App no ar no GitHub Pages:** https://luizvinycius.github.io/gabarito-livre/ (deploy a cada push na main, pelo `.github/workflows/pages.yml`).
 - **`npm run avaliar`:** mede o código do app no Node, com o mesmo CSV do `poc/avaliar.py`. A divergência da Q8 da foto 2 foi resolvida: era a redução da imagem, não a decodificação (3.6). Hoje os dois dão o mesmo preenchimento nas 80 bolinhas.
 - **Testes Vitest:** 24 testes em `leitura.ts` e `correcao.ts`.
 - **Fotos do grupo:** mensagem enviada no WhatsApp; `dataset/LEIAME.md` e `poc/importar.py` cobrem as fotos que chegarem.
@@ -50,7 +50,8 @@ Atualizado em 21/10/2026. O contexto de cada item está na [documentação do pr
 - [ ] **Tabela com uma linha a mais ou a menos** que o gabarito. Nos testes sintéticos (21/10), com **menos** linhas a regra da tabela cortada avisa; com **mais** linhas (folha de 10, gabarito de 8), o app lê 8 linhas seguidas **sem avisar**. Pensar num aviso (ex.: anel alto na linha logo depois da última).
 
 ## Semana 4: piloto e entrega
-- [ ] **Deploy no GitHub Pages** (HTTPS de verdade): o workflow está pronto; falta ativar em Settings → Pages → Source: "GitHub Actions" e fazer o push. Conferir se o Safari passa a lembrar a permissão da câmera. Com o app no ar, o grupo pode usar o "Salvar recorte" (`#teste`) sem estar no Wi-Fi do coordenador.
+- [x] **Deploy no GitHub Pages:** https://luizvinycius.github.io/gabarito-livre/ (21/10).
+- [ ] **Testar o app publicado no celular:** conferir se o Safari passa a lembrar a permissão da câmera e se o PWA instala. Com o app no ar, o grupo pode usar o "Salvar recorte" (`#teste`) sem estar no Wi-Fi do coordenador.
 - [ ] **Piloto** com o Professor B ou o Professor C numa turma real, medindo o tempo manual contra o tempo no app.
 - [ ] **README para usuários:** como usar, como instalar como app, perguntas frequentes.
 - [ ] **Apresentação:** pitch, histórico das entrevistas e demonstração ao vivo.
