@@ -31,7 +31,8 @@ Atualizado em 21/10/2026. O contexto de cada item está na [documentação do pr
 
 ## Agora: fechar a semana 1 (a precisão é o critério que falta)
 - [ ] **Testar no iPhone** a tolerância ao enquadramento (tabela um pouco acima/abaixo do quadro) e o botão "Salvar recorte" (agora na página de teste, link no rodapé ou `#teste`). *Coordenador.*
-- [ ] **Montar o conjunto de 30 a 60 fotos** seguindo o `dataset/LEIAME.md`: fotos mandadas pelo WhatsApp com a lista de respostas (o coordenador importa com `poc/importar.py`) ou recortes salvos pelo app. *Grupo.*
+- [ ] **Montar o conjunto de 30 a 60 fotos** seguindo o `dataset/LEIAME.md`: fotos mandadas pelo WhatsApp com a lista de respostas (o coordenador importa com `poc/importar.py`) ou recortes salvos pelo app. *Grupo.* 9 até agora (28/10). Pedir fotos **de perto** (tabela grande na imagem) e mandadas **como Documento**: as 8 primeiras vieram comprimidas, e bolinha pequena é a maior causa de `?`.
+  - [ ] **Testar no celular a foto da galeria** deitada/inclinada e o aviso de lado incerto; medir o tempo no A32.
   - Cobrir: caneta azul/preta, lápis, marcação fraca, rabiscada, borracha, questão em branco, duas marcadas, sombra, luz amarela, foto torta, **tabela de 10 questões**, Android e iPhone.
 - [ ] **Rodar `python poc/avaliar.py` e `npm run avaliar`** e calibrar os limites com dados reais: gap de 0,15 (`?`), 0,6·gap (`*`), pontuação de anel de 4,3 (tabela cortada) e proporção do quadro (`ALTURA_LINHA` em `app/src/Camera.tsx`).
 - [ ] **Decidir:** se a precisão não chegar perto de 99%, reavaliar a abordagem (folha própria com marcadores, seção 2.3).
