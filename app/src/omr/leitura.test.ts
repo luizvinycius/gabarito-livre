@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { Circulo } from './protocolo'
-import { agruparLinhas, decidir, gradeSuspeita } from './leitura'
+import {
+  type Grade,
+  agruparLinhas,
+  anguloDaGrade,
+  decidir,
+  gradeSuspeita,
+  lerGrade,
+  pistaDoLado,
+} from './leitura'
 
 describe('decidir', () => {
   it('lê a letra quando uma bolinha se destaca', () => {
@@ -22,8 +30,13 @@ describe('decidir', () => {
   })
 
   it('não confunde uma rasura leve com duas marcadas', () => {
-    // a segunda passa da base, mas menos de 0,6 do vão
+    // a segunda passa da base, mas menos de 0,4 do vão
     expect(decidir([0.85, 0.2, 0.4, 0.2, 0.22])).toBe('A')
+  })
+
+  it('pergunta quando a segunda marcação é forte demais para rasura', () => {
+    // foto GS-02, questão 6: B e D marcadas, D mais fraca (0,5 do vão)
+    expect(decidir([0.2, 0.51, 0.2, 0.38, 0.25])).toBe('?')
   })
 })
 
@@ -163,5 +176,159 @@ describe('agruparLinhas', () => {
     expect(g.aneis.every((x) => x === 5)).toBe(true)
     expect(g.linhas[7][4].x).toBeCloseTo(girada[7][4].x, 0)
     expect(g.linhas[7][4].y).toBeCloseTo(girada[7][4].y, 0)
+  })
+
+  it('acompanha a perspectiva de uma foto inclinada', () => {
+    // as linhas de baixo ficam mais perto da câmera: maiores e mais
+    // espaçadas (uma grade afim escorrega mais de 5 px nas pontas)
+    const w = (y: number) => 1 - 0.0004 * (y - 400)
+    const tabela = grade(8).map((linha) =>
+      linha.map(({ x, y, r }) => ({ x: 500 + (x - 500) / w(y), y: 400 + (y - 400) / w(y), r: r / w(y) })),
+    )
+    const g = agruparLinhas(tabela.flat(), 8, anelDa(tabela))!
+    expect(g.aneis.every((a) => a === 5)).toBe(true)
+    g.linhas.forEach((linha, l) =>
+      linha.forEach((c, k) => {
+        expect(Math.hypot(c.x - tabela[l][k].x, c.y - tabela[l][k].y)).toBeLessThan(1)
+      }),
+    )
+    // o raio acompanha: as bolinhas de baixo são maiores
+    expect(g.linhas[7][2].r).toBeGreaterThan(g.linhas[0][2].r * 1.2)
+  })
+
+  it('conta as bolinhas achatadas como detectadas, sem montar a grade com elas', () => {
+    // a primeira linha (longe da câmera) só tem bolinhas achatadas
+    const tabela = grade(8)
+    const detectados = tabela.flatMap((linha, l) => linha.map((c) => ({ ...c, redondo: l > 0 })))
+    const g = agruparLinhas(detectados, 8, anelDa(tabela))!
+    expect(g.detectadas[0]).toBe(5)
+    expect(g.colunas).toEqual([8, 8, 8, 8, 8, 0, 0])
+  })
+
+  it('conta linhas a mais mesmo com anel fraco (foto de longe)', () => {
+    // tabela de 10 linhas, gabarito de 8, todas as linhas com anel 3,75:
+    // sem contar as fracas, o bloco ficaria onde caiu e não avisaria
+    const tabela = grade(10)
+    const fraco = (p: Circulo) => {
+      const nota = anelDa(tabela)(p)
+      return nota === null ? null : nota * 0.75
+    }
+    const g = agruparLinhas(tabela.flat(), 8, fraco)!
+    expect(g.linhas[0][0].y).toBeCloseTo(tabela[0][0].y, 0)
+    expect(g.linhasExtras).toBe(2)
+  })
+})
+
+describe('gradeSuspeita', () => {
+  const base: Grade = {
+    linhas: [],
+    aneis: [5, 5, 5, 5],
+    detectadas: [5, 5, 5, 5],
+    colunas: [4, 4, 4, 4, 4, 0, 0],
+    linhasExtras: 0,
+    raio: 17,
+  }
+
+  it('aceita a tabela com anel alto', () => {
+    expect(gradeSuspeita(base)).toBe(false)
+  })
+
+  it('aceita anel fraco numa linha com bolinhas detectadas em todas as colunas', () => {
+    // foto de longe: bolinhas pequenas e impressão clara
+    expect(gradeSuspeita({ ...base, aneis: [3.6, 4.0, 5, 5], detectadas: [4, 4, 5, 5] })).toBe(false)
+  })
+
+  it('não aceita anel fraco com uma coluna sem bolinhas (grade deslocada)', () => {
+    const aneis = [3.9, 3.9, 3.9, 3.9]
+    const detectadas = [4, 4, 4, 4]
+    expect(gradeSuspeita({ ...base, aneis, detectadas, colunas: [0, 4, 4, 4, 4, 0, 0] })).toBe(true)
+  })
+
+  it('não aceita anel fraco com bolinhas redondas na coluna ao lado do bloco (grade deslocada)', () => {
+    // a coluna "A" do bloco caiu nos números da coluna Questão; a E da
+    // tabela ficou de fora
+    const aneis = [3.9, 3.9, 3.9, 3.9]
+    const detectadas = [4, 4, 4, 4]
+    expect(gradeSuspeita({ ...base, aneis, detectadas, colunas: [4, 4, 4, 4, 4, 0, 4] })).toBe(true)
+  })
+
+  it('não aceita anel abaixo do mínimo fraco', () => {
+    expect(gradeSuspeita({ ...base, aneis: [3.3, 5, 5, 5] })).toBe(true)
+  })
+})
+
+describe('anguloDaGrade', () => {
+  it('acha a inclinação da grade, de -45° a 45°', () => {
+    for (const graus of [0, 20, -30, 70]) {
+      const a = (graus * Math.PI) / 180
+      const girada = grade(8)
+        .flat()
+        .map(({ x, y, r }) => ({
+          x: 500 + (x - 500) * Math.cos(a) - (y - 600) * Math.sin(a),
+          y: 600 + (x - 500) * Math.sin(a) + (y - 600) * Math.cos(a),
+          r,
+        }))
+      const esperado = ((((graus + 45) % 90) + 90) % 90) - 45 // 70° = -20° + 90°
+      expect((anguloDaGrade(girada) * 180) / Math.PI).toBeCloseTo(esperado, 5)
+    }
+  })
+})
+
+// Folha girada de "graus" em volta de (500, 700): posições na foto e a
+// escuridão da foto, com as linhas que separam as questões passando pela
+// coluna Questão (do lado da A) quando linhasDaQuestao.
+function folhaGirada(graus: number, linhasDaQuestao = true) {
+  const a = (graus * Math.PI) / 180
+  const naFoto = ({ x, y, r }: Circulo): Circulo => ({
+    x: 500 + (x - 500) * Math.cos(a) - (y - 700) * Math.sin(a),
+    y: 700 + (x - 500) * Math.sin(a) + (y - 700) * Math.cos(a),
+    r,
+  })
+  const tabela = grade(8, { x0: 420, y0: 420, dx: 60, dy: 52, r: 14 })
+  const foto = tabela.map((linha) => linha.map(naFoto))
+  const escuro = (px: number, py: number) => {
+    // volta para a folha
+    const x = 500 + (px - 500) * Math.cos(a) + (py - 700) * Math.sin(a)
+    const y = 700 - (px - 500) * Math.sin(a) + (py - 700) * Math.cos(a)
+    const naColuna = x > 420 - 2.75 * 60 && x < 420 - 0.5 * 60
+    const vao = (y - 420) / 52 - 0.5
+    const naLinha = vao > -0.5 && vao < 7 && Math.abs(vao - Math.round(vao)) * 52 < 1.5
+    return linhasDaQuestao && naColuna && naLinha ? 0.6 : 0
+  }
+  return { tabela, foto, escuro }
+}
+
+describe('pistaDoLado', () => {
+  it('é positiva com a folha em pé e negativa de cabeça para baixo', () => {
+    const { foto, escuro } = folhaGirada(0)
+    expect(pistaDoLado(foto, escuro)).toBeGreaterThan(0.3)
+    const invertida = [...foto].reverse().map((linha) => [...linha].reverse())
+    expect(pistaDoLado(invertida, escuro)).toBeLessThan(-0.3)
+  })
+})
+
+describe('lerGrade', () => {
+  for (const graus of [90, 180, 270, 35]) {
+    it(`lê a folha girada de ${graus}° com a questão 1 e a coluna A no lugar certo`, () => {
+      const { foto, escuro } = folhaGirada(graus)
+      const { grade: g, ladoIncerto } = lerGrade(foto.flat(), 8, (x, y) => anelDa(foto)({ x, y, r: 14 }), escuro, true)
+      expect(ladoIncerto).toBe(false)
+      expect(Math.hypot(g!.linhas[0][0].x - foto[0][0].x, g!.linhas[0][0].y - foto[0][0].y)).toBeLessThan(1)
+      expect(Math.hypot(g!.linhas[7][4].x - foto[7][4].x, g!.linhas[7][4].y - foto[7][4].y)).toBeLessThan(1)
+    })
+  }
+
+  it('avisa quando não dá para saber o lado da folha', () => {
+    const { foto, escuro } = folhaGirada(90, false)
+    const { grade: g, ladoIncerto } = lerGrade(foto.flat(), 8, (x, y) => anelDa(foto)({ x, y, r: 14 }), escuro, true)
+    expect(g).not.toBeNull()
+    expect(ladoIncerto).toBe(true)
+  })
+
+  it('sem procurar, lê a foto como está', () => {
+    const { foto, escuro } = folhaGirada(0, false)
+    const { grade: g, ladoIncerto } = lerGrade(foto.flat(), 8, (x, y) => anelDa(foto)({ x, y, r: 14 }), escuro, false)
+    expect(ladoIncerto).toBe(false)
+    expect(g!.linhas[0][0].x).toBeCloseTo(foto[0][0].x, 0)
   })
 })

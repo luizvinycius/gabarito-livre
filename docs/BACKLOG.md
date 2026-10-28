@@ -1,8 +1,15 @@
 # Backlog
 
-Atualizado em 21/10/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
+Atualizado em 28/10/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
 
-## Onde paramos (21/10, noite)
+## Onde paramos (28/10)
+- **Primeiras fotos reais do grupo:** 8 folhas (`dataset/fotos/GS-01` a `GS-08`), mandadas pelo WhatsApp (1280 × 720): deitadas, giradas, inclinadas e de longe. Antes, 14 de 76 questões certas; agora 63, **0 erro silencioso**. A GS-07 (tabela com ~200 px na foto) ainda não é lida: o app pede outra foto.
+- **Foto da galeria girada, inclinada ou de longe (3.4, fim da seção):** grade nas 4 orientações, com o lado da folha tirado das linhas da coluna Questão; grade projetiva (perspectiva) com forma local de cada bolinha; nova tentativa com a imagem 2× maior. Lado incerto: tudo `?` e aviso "tire a foto com a folha em pé". A câmera (recorte do quadro-guia) não procura orientação.
+- **Regras novas da leitura (3.4, passos 4 a 13):** anel fraco (3,4) aceito quando as colunas confirmam que a grade não está deslocada; segunda marcação entre 0,4 e 0,6 do destaque vira `?` (a GS-02 Q6, com duas marcadas, era lida como B sem aviso).
+- **Conjunto sintético:** 87,4% → 87,7% de questões certas, 0 erro silencioso; Python e app leram igual nas 98 imagens. **Testes Vitest:** 70.
+- **Folha de galeria é mais lenta:** ~310 ms no PC (antes ~140 ms); a câmera ao vivo não mudou. Falta medir no A32.
+
+### Antes (21/10, noite)
 - **Turma inteira e folhas revistas (3):** botão "Turma" com a nota de cada folha, média, maior e menor; tocar numa folha abre a leitura sobre a foto (guardada no IndexedDB) e deixa corrigir **qualquer** questão, não só as em dúvida. Campo opcional "Aluno". Folhas e gabaritos sobrevivem a recarregar a página; mudar uma letra do gabarito recalcula as notas já dadas.
 - **Gabaritos salvos com nome (4):** novo, duplicar (prova B a partir da A), renomear, excluir; o número de questões trava enquanto houver folhas corrigidas com aquele gabarito.
 - **Captura automática (5):** o quadro lê a tabela ao vivo e captura sozinho quando duas leituras seguidas acham a tabela inteira, parada e com as mesmas letras; depois de "Próxima folha", espera a folha sair do quadro (ou as letras mudarem) para não pegar a mesma folha de novo. Quadro muda de cor e mostra "Procurando", "Saindo do quadro", "Segure firme", "Troque a folha". Dá para desligar. Testado no Chrome do PC com uma câmera falsa (vídeo com duas folhas); **falta testar no celular**.
@@ -31,7 +38,8 @@ Atualizado em 21/10/2026. O contexto de cada item está na [documentação do pr
 
 ## Agora: fechar a semana 1 (a precisão é o critério que falta)
 - [ ] **Testar no iPhone** a tolerância ao enquadramento (tabela um pouco acima/abaixo do quadro) e o botão "Salvar recorte" (agora na página de teste, link no rodapé ou `#teste`). *Coordenador.*
-- [ ] **Montar o conjunto de 30 a 60 fotos** seguindo o `dataset/LEIAME.md`: fotos mandadas pelo WhatsApp com a lista de respostas (o coordenador importa com `poc/importar.py`) ou recortes salvos pelo app. *Grupo.*
+- [ ] **Montar o conjunto de 30 a 60 fotos** seguindo o `dataset/LEIAME.md`: fotos mandadas pelo WhatsApp com a lista de respostas (o coordenador importa com `poc/importar.py`) ou recortes salvos pelo app. *Grupo.* 9 até agora (28/10). Pedir fotos **de perto** (tabela grande na imagem) e mandadas **como Documento**: as 8 primeiras vieram comprimidas, e bolinha pequena é a maior causa de `?`.
+  - [ ] **Testar no celular a foto da galeria** deitada/inclinada e o aviso de lado incerto; medir o tempo no A32.
   - Cobrir: caneta azul/preta, lápis, marcação fraca, rabiscada, borracha, questão em branco, duas marcadas, sombra, luz amarela, foto torta, **tabela de 10 questões**, Android e iPhone.
 - [ ] **Rodar `python poc/avaliar.py` e `npm run avaliar`** e calibrar os limites com dados reais: gap de 0,15 (`?`), 0,6·gap (`*`), pontuação de anel de 4,3 (tabela cortada) e proporção do quadro (`ALTURA_LINHA` em `app/src/Camera.tsx`).
 - [ ] **Decidir:** se a precisão não chegar perto de 99%, reavaliar a abordagem (folha própria com marcadores, seção 2.3).

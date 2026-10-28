@@ -123,9 +123,12 @@ def main():
         if img is None:
             faltando.append(folha['arquivo'])
             continue
-        largura = LARGURA_RECORTE if folha['arquivo'].startswith('recorte-') else LARGURA_FOLHA
+        # o recorte do quadro-guia já vem em pé e no tamanho certo; a folha
+        # inteira pode estar girada ou pequena na foto (procurar)
+        recorte = folha['arquivo'].startswith('recorte-')
+        largura = LARGURA_RECORTE if recorte else LARGURA_FOLHA
         t0 = time.perf_counter()
-        resultado, dbg = poc_bolhas.read_image(img, folha['n'], largura)
+        resultado, dbg = poc_bolhas.read_image(img, folha['n'], largura, procurar=not recorte)
         tempos.append(time.perf_counter() - t0)
         folhas_lidas += 1
 

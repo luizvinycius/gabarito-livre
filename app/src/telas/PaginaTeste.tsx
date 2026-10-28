@@ -12,6 +12,7 @@ import {
   desenharLeitura,
   larguraDoArquivo,
   pixelsParaLeitura,
+  procurarNaFoto,
 } from '../omr/imagem'
 import Camera from '../Camera'
 import { entregarArquivo } from '../arquivo'
@@ -29,6 +30,7 @@ type Medicao = {
   circulos: Circulo[]
   respostas: RespostaLida[]
   tabelaCortada: boolean
+  ladoIncerto: boolean
   linhasExtras: number
   aneis: number[]
   detectadas: number[]
@@ -85,6 +87,7 @@ export default function PaginaTeste() {
           circulos: r.circulos,
           respostas: r.respostas,
           tabelaCortada: r.tabelaCortada,
+          ladoIncerto: r.ladoIncerto,
           linhasExtras: r.linhasExtras,
           aneis: r.aneis,
           detectadas: r.detectadas,
@@ -117,6 +120,7 @@ export default function PaginaTeste() {
         pixels,
         nQuestoes,
         larguraAlvo: imagem.current.largura,
+        procurar: procurarNaFoto(imagem.current),
       } satisfies Mensagem,
       [pixels],
     )
@@ -161,6 +165,7 @@ export default function PaginaTeste() {
     ),
     ...(ultima ? [`Respostas lidas: ${textoRespostas(ultima.respostas)}`] : []),
     ...(ultima?.tabelaCortada ? ['Aviso: tabela cortada'] : []),
+    ...(ultima?.ladoIncerto ? ['Aviso: lado da folha incerto'] : []),
     ...(ultima?.linhasExtras ? [`Aviso: ${ultima.linhasExtras} linha(s) a mais que o gabarito`] : []),
     ...(ultima ? [`Anéis por linha: ${ultima.aneis.map((a) => a.toFixed(1)).join(' ')}`] : []),
     ...(ultima ? [`Bolinhas detectadas por linha: ${ultima.detectadas.join(' ')}`] : []),
@@ -258,6 +263,12 @@ export default function PaginaTeste() {
             <p className="erro">
               A tabela parece estar cortada ou fora do quadro. Afaste um pouco o celular e tente de
               novo.
+            </p>
+          )}
+          {ultima.ladoIncerto && (
+            <p className="erro">
+              Achei a tabela, mas não consegui saber de que lado a folha está. Tire a foto com a folha
+              em pé.
             </p>
           )}
           {ultima.linhasExtras > 0 && (

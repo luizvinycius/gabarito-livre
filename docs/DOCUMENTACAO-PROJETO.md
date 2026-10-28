@@ -109,23 +109,26 @@ A incerta foi uma marcação a lápis muito fraca, com a letra ainda visível. O
 - **Corte fixo de escuridão** (pixel < 120). Falha com lápis e com sombra. Foi substituído pela normalização da iluminação.
 
 ### 3.4 Algoritmo atual (referência para portar para JavaScript)
-1. **Redimensionar** para 1000 px de largura (folha inteira) ou 800 px (recorte do quadro-guia), com `INTER_AREA`.
+1. **Redimensionar** para 1000 px de largura (folha inteira) ou 800 px (recorte do quadro-guia), com `INTER_AREA`. A folha inteira tirada da galeria tem passos a mais (fim desta seção).
 2. **Remover a tinta vermelha** (correção do professor) via HSV: vira branco.
 3. **Limiar adaptativo** (`adaptiveThreshold`, bloco 31, C = 8), seguido de **contornos**.
 4. **Filtrar círculos:**
    - área > 150;
    - circularidade (`4π·área/perímetro²`) > 0,6;
-   - proporção da caixa entre 0,75 e 1,33;
+   - proporção da caixa entre 1/1,6 e 1,6; entre 0,75 e 1,33 o círculo é **redondo** e monta a grade. Os **achatados** (28/10) são bolinhas longe da câmera numa foto inclinada e só contam como bolinha detectada numa posição que a grade já previu: relaxar o filtro de todos fazia os "0" de "01 (0,75)" virarem uma coluna a mais e deslocava a leitura;
    - raio entre 8 e 40 px.
 
    Depois, remover duplicados (anel interno e externo do mesmo círculo).
 5. **Ficar com o tamanho dominante:** só os raios entre 0,75 e 1,3 vezes a mediana.
 6. **Encadear vizinhos horizontais:** distância entre 2 e 12 raios, desnível menor que 0,9 raio. Cadeias com 3 ou mais bolinhas são candidatas a linha de questão.
 7. **Colunas:** agrupar os x de todas as bolinhas e ficar com os 5 grupos vizinhos mais povoados (A a E).
-8. **Linhas:** índice da linha = posição y da cadeia dividida pelo espaçamento médio entre linhas.
-9. **Ajuste afim** (linha, coluna) → (x, y) por mínimos quadrados, descartando pontos fora do padrão. Isso **estima a posição de todas as bolinhas**, inclusive as não detectadas, e tolera rotação, escala e posição.
-10. **Escolher as N linhas consecutivas** com mais evidência, onde N é o número de questões do gabarito. As candidatas incluem N linhas acima e abaixo das detectadas, porque a questão 1 ou a última podem não ter sido detectadas. A evidência de cada linha é o número de bolinhas detectadas nela mais a **pontuação de anel** (0 a 5): em cada posição prevista, o quanto há um círculo escuro (raio de 0,7 a 1,1) com papel claro em volta (1,4 raio), procurando numa vizinhança de até 0,3 raio porque a grade afim erra alguns pixels nas pontas quando há perspectiva.
-    - **Tabela cortada:** se alguma linha escolhida pontuar menos que **4,3**, a grade pode estar deslocada; **todas** as respostas viram `?` e o app pede para reenquadrar. Nas fotos do modelo das fotos de referência, as linhas da tabela tiraram 5,0 e as de fora no máximo 3,6.
+8. **Linhas:** as cadeias em ordem de y; cada uma fica `round(distância até a anterior / espaçamento mediano)` linhas depois da anterior (28/10; antes contava a partir da primeira, e a perspectiva fazia pular uma linha).
+9. **Ajuste da grade** (linha, coluna) → (x, y) por mínimos quadrados, descartando pontos fora do padrão. Isso **estima a posição de todas as bolinhas**, inclusive as não detectadas.
+    - **Projetivo (28/10):** homografia (DLT linear, h33 = 1, pelas equações normais) quando há pontos em 3 linhas e 3 colunas e a perspectiva estimada é razoável; senão, afim. A grade afim não acompanha a foto inclinada (linhas mais espaçadas perto da câmera) e escorregava uma linha.
+    - **A grade cresce linha a linha:** entram os círculos (inclusive os achatados) que caem numa posição prevista das linhas já usadas ou vizinhas, e a grade é reajustada. Numa foto inclinada, só as linhas perto da câmera formam cadeias.
+    - **Forma de cada bolinha:** o círculo das bolinhas detectadas, deformado como os passos de uma coluna e de uma linha da grade naquele ponto (menor e achatado longe da câmera; na grade sem perspectiva, o mesmo círculo em toda a tabela).
+10. **Escolher as N linhas consecutivas** com mais evidência, onde N é o número de questões do gabarito. As candidatas incluem N linhas acima e abaixo das detectadas, porque a questão 1 ou a última podem não ter sido detectadas. A evidência de cada linha é o número de bolinhas detectadas nela (posições com um círculo detectado de tamanho compatível a menos de 0,5 raio) mais a **pontuação de anel** (0 a 5): em cada posição prevista, o quanto há um anel escuro (0,7 a 1,1 da forma da bolinha) com papel claro em volta (1,4), procurando numa vizinhança de até 0,3 raio porque a grade erra alguns pixels nas pontas.
+    - **Tabela cortada:** se alguma linha escolhida pontuar menos que **4,3**, a grade pode estar deslocada; **todas** as respostas viram `?` e o app pede para reenquadrar. Nas fotos do modelo das fotos de referência, as linhas da tabela tiraram 5,0 e as de fora no máximo 3,6. **Bolinhas pequenas ou claras (28/10):** nas fotos de longe ou inclinadas, linhas da tabela tiraram de 3,5 a 4,3; uma linha é aceita com anel a partir de **3,4** se tiver ao menos 3 bolinhas detectadas, se cada coluna do bloco tiver bolinhas detectadas em ao menos metade das linhas e se as colunas logo antes da A e logo depois da E tiverem bolinhas **redondas** em menos da metade (com a grade uma coluna para o lado, a coluna que caiu fora fica sem bolinhas, e a coluna da tabela que ficou de fora do bloco tem as dela). Essas linhas fracas também contam como **linhas a mais** (abaixo): senão, numa foto de longe de uma tabela de 10 linhas com gabarito de 8, o bloco podia começar na 2ª linha sem aviso.
     - **Bolinhas detectadas por linha (21/10):** no modelo compacto (grade grossa), as linhas de "DISSERTATIVA" e o cabeçalho tiram até 5,0 de anel, então o anel sozinho não separa uma linha de bolinhas de uma linha de texto. O que separa é o número de bolinhas detectadas na linha: as da tabela costumam ter de 2 a 5 e as de fora, 0. Uma linha do meio pode ficar com 0 (quando as bolinhas não formam uma cadeia de 3), mas se a **primeira ou a última** linha escolhida não tem nenhuma, o bloco escorregou para uma linha de texto: tabela cortada.
     - **Linhas a mais (21/10):** linhas logo acima ou abaixo do bloco com anel ≥ 4,3 e pelo menos 2 bolinhas detectadas são linhas da tabela que sobraram (ex.: folha de 10 questões com gabarito de 8). O bloco passa a começar na primeira linha da tabela, e o app avisa e pede para o professor ajustar o gabarito, tirar outra foto ou corrigir só as primeiras questões. No Python, todas as respostas viram `?`.
     - **Grade degenerada:** com todas as bolinhas numa linha ou numa coluna só, não dá para estimar a grade: "tabela não encontrada" (antes, o app dava erro e o Python devolvia uma grade sem sentido).
@@ -134,7 +137,13 @@ A incerta foi uma marcação a lápis muito fraca, com a letra ainda visível. O
 13. **Decidir por linha:** `gap` = maior escuridão − mediana da linha.
     - `gap < 0,15`: **`?`** (em branco ou incerto);
     - segunda maior também alta (> 0,6 · gap acima da mediana): **`*`** (duas marcadas);
+    - segunda maior entre 0,4 e 0,6 · gap (28/10): **`?`**, forte demais para rasura e fraca demais para dupla (foto GS-02, questão 6, com B e D marcadas e o D mais fraco, era lida como B sem aviso);
     - caso contrário, a letra mais escura.
+
+**Foto da galeria (28/10).** A folha inteira escolhida da galeria (não o recorte do quadro-guia, que já vem em pé) pode estar deitada, de cabeça para baixo, girada ou pequena na foto. Nela, a leitura:
+- mede o **ângulo da grade** pela direção de cada bolinha até a vizinha mais próxima (média de 4 vezes o ângulo, que é igual para as 4 direções da grade) e monta a grade nas **4 orientações** (ângulo + 0°, 90°, 180° e 270°);
+- entre as orientações sem suspeita, escolhe a de maior **pista do lado da folha**: as linhas que separam as questões continuam pela coluna "Questão", do lado da A, e não há linha nenhuma depois da E. A pista é o contraste no meio do caminho entre duas linhas da grade, a 1,3, 1,7 e 2,1 colunas antes da A, menos o mesmo depois da E. Nas fotos e no conjunto sintético, ficou entre 0,3 e 1,0 na orientação certa e com o sinal trocado de cabeça para baixo. Abaixo de **0,1** não dá para saber o lado: todas as respostas viram `?` e o app pede uma foto com a folha em pé. Na dúvida pequena (até 0,05), fica a foto como está. Uma pista pelas letras dentro das bolinhas (C e E com mais tinta à esquerda) foi testada e descartada: a normalização da luz perto das linhas grossas pesa mais que as letras, e no modelo clássico o sinal invertia;
+- se não achar a tabela, **tenta de novo com a imagem 2 vezes maior**: em fotos comprimidas (WhatsApp, 1280 × 720) tiradas de longe, as bolinhas ficam abaixo do raio mínimo de 8 px.
 
 ### 3.5 Teste do OpenCV.js no navegador (18/10)
 Página de teste em `app/` (seção 8.5): roda num Web Worker as etapas pesadas do algoritmo (remover vermelho, limiar adaptativo, contornos, filtro de círculos e normalização da iluminação), sem ainda decidir as respostas.

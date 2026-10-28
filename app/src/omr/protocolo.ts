@@ -16,6 +16,10 @@ export type Mensagem =
       // a imagem é reduzida para esta largura no worker, com INTER_AREA,
       // como no protótipo em Python
       larguraAlvo: number
+      // foto inteira tirada fora do app (galeria): a folha pode estar
+      // girada ou pequena na foto, e a leitura procura nas 4 orientações e
+      // numa escala maior. O recorte do quadro-guia já vem em pé.
+      procurar: boolean
     }
 
 export type Resposta =
@@ -30,6 +34,9 @@ export type Resposta =
       // alguma linha escolhida não parece ser da tabela: provavelmente ela
       // ficou cortada; todas as respostas vêm como '?'
       tabelaCortada: boolean
+      // achou a tabela, mas não deu para saber de que lado a folha está
+      // (foto da galeria girada); todas as respostas vêm como '?'
+      ladoIncerto: boolean
       // linhas de bolinhas fora das escolhidas: a tabela tem mais questões
       // que o gabarito. As respostas vêm lidas (das primeiras linhas), mas o
       // app pede para o professor conferir antes de dar a nota.

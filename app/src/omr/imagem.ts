@@ -18,6 +18,13 @@ export function larguraDoArquivo(nome: string) {
   return nome.startsWith('recorte-') ? LARGURA_RECORTE : LARGURA_FOLHA
 }
 
+// A folha inteira (foto da galeria) pode estar girada ou pequena na foto, e a
+// leitura procura a tabela; o recorte do quadro-guia já vem em pé e no tamanho
+// certo.
+export function procurarNaFoto({ largura }: Foto) {
+  return largura === LARGURA_FOLHA
+}
+
 // Pixels da foto com até o dobro da largura da leitura: a redução final é
 // feita no worker, com o INTER_AREA do OpenCV, para dar o mesmo resultado
 // do protótipo em Python.

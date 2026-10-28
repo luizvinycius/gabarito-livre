@@ -9,7 +9,10 @@ import { type Foto, desenharFoto, desenharLeitura } from '../omr/imagem'
 import type { Leitura } from '../omr/useLeitor'
 
 // O que a tela precisa da leitura (uma folha já corrigida guarda só isto).
-export type LeituraTela = Pick<Leitura, 'circulos' | 'grade' | 'respostas' | 'tabelaCortada' | 'linhasExtras'>
+export type LeituraTela = Pick<
+  Leitura,
+  'circulos' | 'grade' | 'respostas' | 'tabelaCortada' | 'ladoIncerto' | 'linhasExtras'
+>
 
 type Props = {
   titulo: string
@@ -65,7 +68,8 @@ export default function Resultado({
 
   const { nota, total, acertos, pendentes, questoes } = correcao
   const naoEncontrada = !!leitura && leitura.respostas.length === 0 && !conferirAMao
-  const cortada = !!leitura && leitura.tabelaCortada && !conferirAMao
+  const ladoIncerto = !!leitura && leitura.ladoIncerto && !conferirAMao
+  const cortada = !!leitura && (leitura.tabelaCortada || ladoIncerto) && !conferirAMao
   const extras = !!leitura && !cortada && !naoEncontrada && leitura.linhasExtras > 0 && !aceitarExtras
   const mostrarQuestoes = !!leitura && !naoEncontrada && !cortada && !extras
   const pronta = mostrarQuestoes && pendentes === 0
@@ -82,7 +86,9 @@ export default function Resultado({
             <p className="erro">
               {naoEncontrada
                 ? 'Não encontrei a tabela de respostas nesta foto. Tire outra, com a tabela inteira dentro do quadro.'
-                : 'A tabela parece estar cortada ou fora do quadro. Afaste um pouco o celular e tire outra foto.'}
+                : ladoIncerto
+                  ? 'Achei a tabela, mas não consegui saber de que lado a folha está. Tire outra foto, com a folha em pé.'
+                  : 'A tabela parece estar cortada ou fora do quadro. Afaste um pouco o celular e tire outra foto.'}
             </p>
             {onRefazer && (
               <button className="botao" onClick={onRefazer}>
