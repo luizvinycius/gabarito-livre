@@ -219,9 +219,58 @@ export function agruparLinhas(
   let rmed = mediana(redondos.map((c) => c.r))
   const circulos = redondos.filter((c) => c.r > 0.75 * rmed && c.r < 1.3 * rmed)
   rmed = mediana(circulos.map((c) => c.r))
-  const n = circulos.length
 
-  // 6. encadeia vizinhos horizontais (union-find)
+  const cadeias = cadeiasHorizontais(circulos, rmed)
+  if (!cadeias) return null
+  const obs = observacoesDasCadeias(cadeias.cadeias, centrosDasColunas(cadeias.cadeias, cadeias.sp), cadeias.sp, rmed)
+  if (obs.length < 3) return null
+  const ajuste = ajusteComDescarte(obs, rmed, nQuestoes)
+  if (!ajuste) return null
+  const grade = crescerGrade(ajuste.obs, ajuste.prever, detectados, rmed, nQuestoes)
+  const posicao = formaDaGrade(grade.obs, grade.prever, rmed)
+
+  // 10. o professor já informou quantas questões há: escolhe as nQuestoes
+  // linhas seguidas com mais evidência. A evidência de cada linha é o número
+  // de bolinhas detectadas nela mais a pontuação de anel nas 5 posições
+  // previstas. Testa também linhas acima e abaixo das detectadas, porque a
+  // questão 1 (ou a última) pode não ter sido detectada.
+  const linhasObs = grade.obs.map((o) => o.linha)
+  const candidatas = new Map<number, Candidata>()
+  for (let l = Math.min(...linhasObs) - nQuestoes; l <= Math.max(...linhasObs) + nQuestoes; l++) {
+    const pos = [0, 1, 2, 3, 4].map((c) => posicao(c, l))
+    const notas = pos.map(anel)
+    if (notas.some((nota) => nota === null)) continue // linha fora da imagem
+    const soma = (notas as number[]).reduce((a, b) => a + b, 0)
+    const achou = pos.map((p) => detectada(detectados, p).algum)
+    // colunas logo antes da A e logo depois da E: com bolinhas redondas, a
+    // grade está uma coluna para o lado (ver gradeSuspeita)
+    const vizinhas = [posicao(-1, l), posicao(5, l)].map((p) => detectada(detectados, p).redondo)
+    candidatas.set(l, { pos, anel: soma, det: achou.filter(Boolean).length, achou: [...achou, ...vizinhas] })
+  }
+  const bloco = escolherBloco(candidatas, nQuestoes)
+  if (!bloco) return null
+  const escolhidas = Array.from({ length: nQuestoes }, (_, j) => candidatas.get(bloco.inicio + j)!)
+
+  return {
+    linhas: escolhidas.map((c) => c.pos.map(({ x, y, r }) => ({ x, y, r }))),
+    aneis: escolhidas.map((c) => c.anel),
+    detectadas: escolhidas.map((c) => c.det),
+    colunas: [0, 1, 2, 3, 4, 5, 6].map((k) => escolhidas.filter((c) => c.achou[k]).length),
+    linhasExtras: bloco.linhasExtras,
+    raio: rmed,
+  }
+}
+
+// Linha candidata do bloco: posições, pontuação de anel (0 a 5), bolinhas
+// detectadas e, por coluna A a E, se há bolinha detectada, seguido de se há
+// bolinha redonda na coluna antes da A e na depois da E.
+type Candidata = { pos: Posicao[]; anel: number; det: number; achou: boolean[] }
+
+// 6. Encadeia vizinhos horizontais (union-find): distância de 2 a 12 raios,
+// desnível menor que 0,9 raio. Devolve as cadeias de 3 ou mais bolinhas e o
+// espaçamento entre colunas, ou null se não houver cadeia.
+function cadeiasHorizontais(circulos: Circulo[], rmed: number): { cadeias: Circulo[][]; sp: number } | null {
+  const n = circulos.length
   const pai = circulos.map((_, i) => i)
   const raiz = (i: number): number => {
     while (pai[i] !== i) {
@@ -254,9 +303,12 @@ export function agruparLinhas(
   })
   const cadeias = [...grupos.values()].filter((g) => g.length >= 3)
   if (cadeias.length === 0) return null
-  const sp = percentil(vaos, 30) // espaçamento entre colunas (vizinhos diretos)
+  return { cadeias, sp: percentil(vaos, 30) } // espaçamento entre colunas (vizinhos diretos)
+}
 
-  // 7. colunas: agrupa os x e fica com as 5 colunas vizinhas mais povoadas
+// 7. x das colunas A a E: agrupa os x de todas as bolinhas das cadeias e fica
+// com os 5 grupos vizinhos mais povoados.
+function centrosDasColunas(cadeias: Circulo[][], sp: number): number[] {
   const xs = cadeias.flat().map((c) => c.x).sort((a, b) => a - b)
   const grupoX: number[][] = [[xs[0]]]
   for (const x of xs.slice(1)) {
@@ -274,17 +326,20 @@ export function agruparLinhas(
       k0 = k
     }
   }
-  const centros = grupoX.slice(k0, k0 + 5).map(media)
+  return grupoX.slice(k0, k0 + 5).map(media)
+}
 
-  // 8. linhas: as cadeias em ordem de y; cada uma fica round(distância /
-  // espaçamento) linhas depois da anterior. Contar a partir da vizinha, e não
-  // da primeira, aguenta a perspectiva (linhas mais espaçadas perto da câmera).
+// 8. (linha, coluna, x, y) de cada bolinha das cadeias. As cadeias em ordem
+// de y; cada uma fica round(distância / espaçamento) linhas depois da
+// anterior. Contar a partir da vizinha, e não da primeira, aguenta a
+// perspectiva (linhas mais espaçadas perto da câmera).
+function observacoesDasCadeias(cadeias: Circulo[][], centros: number[], sp: number, rmed: number): Obs[] {
   const ordenadas = cadeias
     .map((g) => ({ g, y: media(g.map((c) => c.y)) }))
     .sort((a, b) => a.y - b.y)
   const ys = ordenadas.map((o) => o.y)
   const rsp = ys.length > 1 ? Math.max(mediana(ys.slice(1).map((y, i) => y - ys[i])), rmed) : 4 * rmed
-  let obs: Obs[] = []
+  const obs: Obs[] = []
   let linha = 0
   ordenadas.forEach(({ g }, k) => {
     if (k > 0) linha += Math.round((ys[k] - ys[k - 1]) / rsp)
@@ -294,19 +349,25 @@ export function agruparLinhas(
       if (d[coluna] < sp * 0.35) obs.push({ linha, coluna, x, y })
     }
   })
-  if (obs.length < 3) return null
+  return obs
+}
 
-  // 9. ajuste (linha, coluna) → (x, y), descartando pontos fora do padrão:
-  // projetivo quando dá, afim quando não. Com tudo numa linha ou numa coluna
-  // só, não dá para estimar a grade.
-  const ajustar = (o: Obs[]) => {
-    const ls = o.map((p) => p.linha)
-    const lo = Math.min(...ls) - nQuestoes
-    const hi = Math.max(...ls) + nQuestoes
-    return ajusteProjetivo(o, rmed, lo, hi) ?? ajusteAfim(o)
-  }
+// Grade (coluna, linha) → (x, y): projetiva quando dá, afim quando não.
+function ajustarGrade(obs: Obs[], rmed: number, nQuestoes: number): Prever | null {
+  const ls = obs.map((p) => p.linha)
+  return ajusteProjetivo(obs, rmed, Math.min(...ls) - nQuestoes, Math.max(...ls) + nQuestoes) ?? ajusteAfim(obs)
+}
+
+// 9. Ajuste da grade descartando pontos fora do padrão. null se não der para
+// estimar a grade (tudo numa linha ou numa coluna só).
+function ajusteComDescarte(
+  inicial: Obs[],
+  rmed: number,
+  nQuestoes: number,
+): { obs: Obs[]; prever: Prever } | null {
+  let obs = inicial
   for (let it = 0; it < 3; it++) {
-    const p = ajustar(obs)
+    const p = ajustarGrade(obs, rmed, nQuestoes)
     if (!p) return null
     const res = obs.map((o) => {
       const [x, y] = p(o.coluna, o.linha)
@@ -318,14 +379,24 @@ export function agruparLinhas(
     obs = manter
     if (obs.length < 3) return null
   }
-  let prever = ajustar(obs)
-  if (!prever) return null
+  const prever = ajustarGrade(obs, rmed, nQuestoes)
+  return prever ? { obs, prever } : null
+}
 
-  // A grade cresce linha a linha: entram os círculos (inclusive os achatados e
-  // os que ficaram fora das cadeias) que caem numa posição prevista das linhas
-  // já usadas ou vizinhas, e a grade é reajustada. Numa foto inclinada, só as
-  // linhas perto da câmera formam cadeias, e a grade projetiva tirada só delas
-  // erra as linhas do fundo.
+// A grade cresce linha a linha: entram os círculos (inclusive os achatados e
+// os que ficaram fora das cadeias) que caem numa posição prevista das linhas
+// já usadas ou vizinhas, e a grade é reajustada. Numa foto inclinada, só as
+// linhas perto da câmera formam cadeias, e a grade projetiva tirada só delas
+// erra as linhas do fundo.
+function crescerGrade(
+  inicial: Obs[],
+  previsao: Prever,
+  detectados: Detectado[],
+  rmed: number,
+  nQuestoes: number,
+): { obs: Obs[]; prever: Prever } {
+  let obs = inicial
+  let prever = previsao
   const casar = (p: Prever, l: number, coluna: number): Obs | null => {
     const [x, y] = p(coluna, l)
     let j = -1
@@ -353,18 +424,20 @@ export function agruparLinhas(
       }
     }
     if (novos.length <= obs.length) break
-    const p = ajustar(novos)
+    const p = ajustarGrade(novos, rmed, nQuestoes)
     if (!p) break
     obs = novos
     prever = p
   }
-  const grade: Prever = prever
+  return { obs, prever }
+}
 
-  // Forma de cada bolinha: na perspectiva, as bolinhas longe da câmera ficam
-  // menores e achatadas, na mesma proporção dos passos de uma coluna e de uma
-  // linha da grade naquele ponto. As bolinhas detectadas (redondas, de raio
-  // rmed) são a referência. Na grade afim sem inclinação, a forma é o círculo
-  // de raio rmed em toda a tabela.
+// Posição e forma de cada bolinha: na perspectiva, as bolinhas longe da câmera
+// ficam menores e achatadas, na mesma proporção dos passos de uma coluna e de
+// uma linha da grade naquele ponto. As bolinhas detectadas (redondas, de raio
+// rmed) são a referência. Na grade afim sem inclinação, a forma é o círculo de
+// raio rmed em toda a tabela.
+function formaDaGrade(obs: Obs[], grade: Prever, rmed: number): (c: number, l: number) => Posicao {
   const eixos = (c: number, l: number) => {
     const [x0, y0] = grade(c - 0.5, l)
     const [x1, y1] = grade(c + 0.5, l)
@@ -375,41 +448,33 @@ export function agruparLinhas(
   const passos = obs.map((o) => eixos(o.coluna, o.linha))
   const refColuna = mediana(passos.map(([cx, cy]) => Math.hypot(cx, cy)))
   const refLinha = mediana(passos.map(([, , lx, ly]) => Math.hypot(lx, ly)))
-  const posicao = (c: number, l: number): Posicao => {
+  return (c, l) => {
     const [x, y] = grade(c, l)
     const [cx, cy, lx, ly] = eixos(c, l)
     const forma: Forma = [(rmed * cx) / refColuna, (rmed * lx) / refLinha, (rmed * cy) / refColuna, (rmed * ly) / refLinha]
     return { x, y, r: Math.sqrt(Math.abs(forma[0] * forma[3] - forma[1] * forma[2])), forma }
   }
+}
 
-  // Bolinhas detectadas numa linha: posições com algum círculo detectado
-  // perto e de tamanho compatível, inclusive os achatados e os que ficaram
-  // fora das cadeias. redondo: algum deles é redondo.
-  const detectada = ({ x, y, r }: Circulo) => {
-    const perto = detectados.filter((c) => Math.hypot(c.x - x, c.y - y) < 0.5 * r && c.r > 0.6 * r && c.r < 1.6 * r)
-    return { algum: perto.length > 0, redondo: perto.some((c) => c.redondo !== false) }
-  }
+// Bolinha detectada numa posição: algum círculo detectado perto e de tamanho
+// compatível, inclusive os achatados e os que ficaram fora das cadeias.
+// redondo: algum deles é redondo.
+function detectada(detectados: Detectado[], { x, y, r }: Circulo) {
+  const perto = detectados.filter((c) => Math.hypot(c.x - x, c.y - y) < 0.5 * r && c.r > 0.6 * r && c.r < 1.6 * r)
+  return { algum: perto.length > 0, redondo: perto.some((c) => c.redondo !== false) }
+}
 
-  // 10. o professor já informou quantas questões há: escolhe as nQuestoes
-  // linhas seguidas com mais evidência. A evidência de cada linha é o número
-  // de bolinhas detectadas nela mais a pontuação de anel nas 5 posições
-  // previstas. Testa também linhas acima e abaixo das detectadas, porque a
-  // questão 1 (ou a última) pode não ter sido detectada.
-  const linhasObs = obs.map((o) => o.linha)
-  const rMin = Math.min(...linhasObs)
-  const rMax = Math.max(...linhasObs)
-  const candidatas = new Map<number, { pos: Posicao[]; anel: number; det: number; achou: boolean[] }>()
-  for (let l = rMin - nQuestoes; l <= rMax + nQuestoes; l++) {
-    const pos = [0, 1, 2, 3, 4].map((c) => posicao(c, l))
-    const notas = pos.map(anel)
-    if (notas.some((nota) => nota === null)) continue // linha fora da imagem
-    const soma = (notas as number[]).reduce((a, b) => a + b, 0)
-    const achou = pos.map((p) => detectada(p).algum)
-    // colunas logo antes da A e logo depois da E: com bolinhas redondas, a
-    // grade está uma coluna para o lado (ver gradeSuspeita)
-    const vizinhas = [posicao(-1, l), posicao(5, l)].map((p) => detectada(p).redondo)
-    candidatas.set(l, { pos, anel: soma, det: achou.filter(Boolean).length, achou: [...achou, ...vizinhas] })
-  }
+// 10. As nQuestoes linhas seguidas com mais evidência (anel + detectadas).
+// Linhas de bolinhas logo acima ou logo abaixo do bloco: a tabela tem mais
+// linhas que o gabarito (ex.: folha de 10 questões com gabarito de 8). Aí a
+// questão 1 é a primeira linha da tabela: o bloco sobe até ela. Vale também a
+// linha fraca que gradeSuspeita aceita: senão, numa foto de longe de uma
+// tabela com linhas a mais, o bloco ficaria onde caiu (a questão 1 lida da 2ª
+// linha da tabela) sem aviso. null se o bloco não couber.
+function escolherBloco(
+  candidatas: Map<number, Candidata>,
+  nQuestoes: number,
+): { inicio: number; linhasExtras: number } | null {
   let s0: number | null = null
   let melhor = -Infinity
   for (const k of candidatas.keys()) {
@@ -427,12 +492,6 @@ export function agruparLinhas(
   }
   if (s0 === null) return null
 
-  // Linhas de bolinhas logo acima ou logo abaixo do bloco: a tabela tem mais
-  // linhas que o gabarito (ex.: folha de 10 questões com gabarito de 8). Aí a
-  // questão 1 é a primeira linha da tabela: o bloco sobe até ela.
-  // Vale também a linha fraca que gradeSuspeita aceita: senão, numa foto de
-  // longe de uma tabela com linhas a mais, o bloco ficaria onde caiu (a
-  // questão 1 lida da 2ª linha da tabela) sem aviso.
   const temBolinhas = (l: number) => {
     const c = candidatas.get(l)
     if (!c) return false
@@ -442,16 +501,7 @@ export function agruparLinhas(
   while (temBolinhas(inicio - 1)) inicio--
   let linhasExtras = 0
   for (let l = inicio + nQuestoes; temBolinhas(l); l++) linhasExtras++
-  const escolhidas = Array.from({ length: nQuestoes }, (_, j) => candidatas.get(inicio + j)!)
-
-  return {
-    linhas: escolhidas.map((c) => c.pos.map(({ x, y, r }) => ({ x, y, r }))),
-    aneis: escolhidas.map((c) => c.anel),
-    detectadas: escolhidas.map((c) => c.det),
-    colunas: [0, 1, 2, 3, 4, 5, 6].map((k) => escolhidas.filter((c) => c.achou[k]).length),
-    linhasExtras,
-    raio: rmed,
-  }
+  return { inicio, linhasExtras }
 }
 
 /**
