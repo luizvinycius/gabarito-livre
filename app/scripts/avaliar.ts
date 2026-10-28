@@ -7,6 +7,8 @@
 //   npm run avaliar -- --csv outro.csv --fotos outra/pasta
 //   npm run avaliar -- --conjunto sinteticas   (dataset/sinteticas/, do poc/gerar_sinteticas.py)
 //   npm run avaliar -- --leituras ts.csv       (grava "arquivo;lido" de cada folha)
+//   npm run avaliar -- --detalhes ts.jsonl     (anéis, detectadas e grade de cada folha;
+//                                               compare com poc/comparar_detalhes.py)
 //
 // Folhas com linhas a mais que o gabarito contam como '?' em todas as
 // questões: o app lê as primeiras linhas, mas pede para o professor conferir
@@ -106,6 +108,7 @@ async function main() {
   const faltando: string[] = []
   const tempos: number[] = []
   const leituras: string[] = []
+  const detalhes: string[] = []
   let folhasCertas = 0
 
   console.log(`${'arquivo'.padEnd(40)} ${'esperado'.padEnd(12)} ${'lido'.padEnd(12)} resultado`)
@@ -140,6 +143,14 @@ async function main() {
       ? '?'.repeat(folha.n)
       : r.respostas.map((x) => x.letra).join('') || '-'.repeat(folha.n)
     leituras.push(`${folha.arquivo};${lido}`)
+    detalhes.push(
+      JSON.stringify({
+        arquivo: folha.arquivo,
+        aneis: r.aneis,
+        detectadas: r.detectadas,
+        grade: (r.grade ?? []).map((linha) => linha.map(({ x, y, r }) => [x, y, r])),
+      }),
+    )
     const classes = [...folha.respostas].map((e, i) => classificar(e, lido[i]))
     const grupos = [`celular: ${folha.celular}`, ...folha.condicoes.map((c) => `condição: ${c}`)]
     classes.forEach((c, i) => {
@@ -170,6 +181,8 @@ async function main() {
 
   const iLeituras = args.indexOf('--leituras')
   if (iLeituras >= 0 && args[iLeituras + 1]) writeFileSync(resolve(args[iLeituras + 1]), leituras.join('\n') + '\n')
+  const iDetalhes = args.indexOf('--detalhes')
+  if (iDetalhes >= 0 && args[iDetalhes + 1]) writeFileSync(resolve(args[iDetalhes + 1]), detalhes.join('\n') + '\n')
   const questoes = total.certa + total.aviso + total.silenciosa
   console.log()
   console.log(`Folhas lidas: ${tempos.length} (${folhasCertas} totalmente certas)`)

@@ -39,10 +39,10 @@ jobs:
       # sai com erro se houver erro silencioso; o próximo passo roda mesmo
       # assim, para mostrar também se as implementações divergiram
       - name: Medir no Python
-        run: python poc/avaliar.py --conjunto sinteticas --leituras py.csv
+        run: python poc/avaliar.py --conjunto sinteticas --leituras py.csv --detalhes py.jsonl
       - name: Medir no app
         if: ${{ !cancelled() }}
-        run: npm run avaliar -- --conjunto sinteticas --leituras ../ts.csv
+        run: npm run avaliar -- --conjunto sinteticas --leituras ../ts.csv --detalhes ../ts.jsonl
         working-directory: app
 
       - name: Conferir que as duas implementações leram o mesmo
@@ -54,8 +54,15 @@ jobs:
           fi
           echo "Leituras iguais em $(wc -l < py.csv) imagens."
 
+      # anéis, bolinhas detectadas e grade: pega a divergência antes de ela
+      # mudar uma letra
+      - name: Conferir os valores intermediários
+        if: ${{ !cancelled() }}
+        run: python poc/comparar_detalhes.py py.jsonl ts.jsonl
+
       - name: Fotos reais do dataset/
         if: ${{ !cancelled() }}
         run: |
-          python poc/avaliar.py
-          cd app && npm run avaliar
+          python poc/avaliar.py --detalhes py-fotos.jsonl
+          (cd app && npm run avaliar -- --detalhes ../ts-fotos.jsonl)
+          python poc/comparar_detalhes.py py-fotos.jsonl ts-fotos.jsonl

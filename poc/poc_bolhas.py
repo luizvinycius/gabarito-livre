@@ -200,9 +200,58 @@ def group_rows(circles, n_q, anel):
     circles = [c[:3] for c in circles if c[3]]
     if not circles:
         return vazio
+    # 5. fica com os redondos do tamanho dominante
     rmed = np.median([c[2] for c in circles])
     circles = [c for c in circles if 0.75 * rmed < c[2] < 1.3 * rmed]
     rmed = np.median([c[2] for c in circles])
+
+    cadeias = horizontal_chains(circles, rmed)
+    if cadeias is None:
+        return vazio
+    chains, sp = cadeias
+    obs = chain_observations(chains, column_centers(chains, sp), sp, rmed)
+    if len(obs) < 3:
+        return vazio
+    ajuste = robust_fit(np.array(obs, float), rmed, n_q)
+    if ajuste is None:
+        return vazio
+    obs, prever = grow_grid(*ajuste, todos, rmed, n_q)
+    posicao = grid_shape(obs, prever, rmed)
+
+    # o professor já informou quantas questões há: escolhe as n_q linhas
+    # seguidas com mais evidência. A evidência de cada linha é o número de
+    # bolinhas detectadas nela mais a pontuação de anel nas 5 posições
+    # previstas. Testa também linhas acima e abaixo das detectadas, porque a
+    # questão 1 (ou a última) pode não ter sido detectada.
+    cand = {}
+    for ri in range(int(obs[:, 0].min()) - n_q, int(obs[:, 0].max()) + n_q + 1):
+        pos = [posicao(ci, ri) for ci in range(5)]
+        sc = [anel(x, y, f) for x, y, _, f in pos]
+        if None in sc:
+            continue  # linha fora da imagem
+        achou = detections(todos, redondo, pos)
+        # colunas logo antes da A e logo depois da E: com bolinhas redondas,
+        # a grade está uma coluna para o lado (ver suspeita)
+        vizinhas = [red for _, red in detections(todos, redondo, [posicao(-1, ri), posicao(5, ri)])]
+        cand[ri] = (pos, sum(sc), sum(a for a, _ in achou), [a for a, _ in achou] + vizinhas)
+    bloco = choose_block(cand, n_q)
+    if bloco is None:
+        return vazio
+    s0, extras = bloco
+    escolhidas = [cand[ri] for ri in range(s0, s0 + n_q)]
+    rows = [[(x, y, r) for x, y, r, _ in c[0]] for c in escolhidas]
+    rings = [c[1] for c in escolhidas]
+    dets = [int(c[2]) for c in escolhidas]
+    # detectadas em cada coluna A a E e redondas nas colunas antes da A e
+    # depois da E
+    cols = [sum(c[3][ci] for c in escolhidas) for ci in range(7)]
+    return rows, rings, dets, extras, rmed, cols
+
+
+def horizontal_chains(circles, rmed):
+    """6. Encadeia vizinhos horizontais (union-find): distância de 2 a 12
+    raios, desnível menor que 0,9 raio. Devolve (cadeias de 3 ou mais
+    bolinhas, espaçamento entre colunas), ou None se não houver cadeia."""
     n = len(circles)
     parent = list(range(n))
 
@@ -229,12 +278,14 @@ def group_rows(circles, n_q, anel):
         groups.setdefault(find(i), []).append(circles[i])
     chains = [g for g in groups.values() if len(g) >= 3]
     if not chains:
-        return vazio
-    sp = np.percentile(gaps, 30)  # espaçamento entre colunas (vizinhos diretos)
+        return None
+    return chains, np.percentile(gaps, 30)  # espaçamento entre colunas (vizinhos diretos)
 
-    # colunas: agrupa os x de todas as bolinhas; fica com as 5 colunas mais povoadas e vizinhas
-    pts = [c for g in chains for c in g]
-    xs = np.sort([c[0] for c in pts])
+
+def column_centers(chains, sp):
+    """7. x das colunas A a E: agrupa os x de todas as bolinhas das cadeias e
+    fica com os 5 grupos vizinhos mais povoados."""
+    xs = np.sort([c[0] for g in chains for c in g])
     clusters, cur = [], [xs[0]]
     for x in xs[1:]:
         if x - cur[-1] < sp / 2:
@@ -245,58 +296,63 @@ def group_rows(circles, n_q, anel):
     centers = [np.mean(c) for c in clusters]
     counts = [len(c) for c in clusters]
     k0 = max(range(max(1, len(centers) - 4)), key=lambda k: sum(counts[k:k + 5]))
-    centers = centers[k0:k0 + 5]
+    return centers[k0:k0 + 5]
 
-    # linhas: as cadeias em ordem de y; cada uma fica round(distância /
-    # espaçamento) linhas depois da anterior. Contar a partir da vizinha, e não
-    # da primeira, aguenta a perspectiva (linhas mais espaçadas perto da câmera).
-    chains.sort(key=lambda g: np.mean([c[1] for c in g]))
+
+def chain_observations(chains, centers, sp, rmed):
+    """8. (linha, coluna, x, y) de cada bolinha das cadeias. As cadeias em
+    ordem de y; cada uma fica round(distância / espaçamento) linhas depois da
+    anterior. Contar a partir da vizinha, e não da primeira, aguenta a
+    perspectiva (linhas mais espaçadas perto da câmera)."""
+    chains = sorted(chains, key=lambda g: np.mean([c[1] for c in g]))
     ys = [np.mean([c[1] for c in g]) for g in chains]
     rsp = max(np.median(np.diff(ys)), rmed) if len(ys) > 1 else 4 * rmed
     idx = [0]
     for k in range(1, len(ys)):
         idx.append(idx[-1] + int(round((ys[k] - ys[k - 1]) / rsp)))
-    obs = []  # (linha, coluna, x, y)
+    obs = []
     for ri, g in zip(idx, chains):
         for x, y, _ in g:
             d = [abs(x - cx) for cx in centers]
             ci = int(np.argmin(d))
             if d[ci] < sp * 0.35:
                 obs.append((ri, ci, x, y))
+    return obs
 
-    # ajuste (linha, coluna) -> (x, y), com descarte de pontos fora do padrão:
-    # projetivo quando dá, afim quando não
-    if len(obs) < 3:
-        return vazio
-    obs = np.array(obs, float)
 
-    def ajustar(o):
-        lo, hi = o[:, 0].min() - n_q, o[:, 0].max() + n_q
-        return fit_projective(o, rmed, lo, hi) or fit_affine(o)
+def fit_grid(obs, rmed, n_q):
+    """Grade (coluna, linha) -> (x, y): projetiva quando dá, afim quando não."""
+    lo, hi = obs[:, 0].min() - n_q, obs[:, 0].max() + n_q
+    return fit_projective(obs, rmed, lo, hi) or fit_affine(obs)
 
+
+def robust_fit(obs, rmed, n_q):
+    """9. Ajuste da grade descartando pontos fora do padrão. Devolve (obs que
+    ficaram, prever), ou None se não der para estimar a grade (tudo numa
+    linha ou numa coluna só)."""
     for _ in range(3):
-        prever = ajustar(obs)
+        prever = fit_grid(obs, rmed, n_q)
         if prever is None:
-            # tudo numa linha ou numa coluna só: não dá para estimar a grade
-            return vazio
+            return None
         res = np.array([np.hypot(*np.subtract(prever(c, r), (x, y))) for r, c, x, y in obs])
         keep = res < max(0.4 * rmed, np.percentile(res, 90))
         if keep.all():
             break
         obs = obs[keep]
         if len(obs) < 3:
-            return vazio
-    prever = ajustar(obs)
-    if prever is None:
-        return vazio
+            return None
+    prever = fit_grid(obs, rmed, n_q)
+    return None if prever is None else (obs, prever)
 
-    # A grade cresce linha a linha: entram os círculos (inclusive os
-    # achatados e os que ficaram fora das cadeias) que caem numa posição
-    # prevista das linhas já usadas ou vizinhas, e a grade é reajustada. Numa
-    # foto inclinada, só as linhas perto da câmera formam cadeias, e a grade
-    # projetiva tirada só delas erra as linhas do fundo.
-    def casar(ri, ci):
-        x, y = prever(ci, ri)
+
+def grow_grid(obs, prever, todos, rmed, n_q):
+    """A grade cresce linha a linha: entram os círculos (inclusive os
+    achatados e os que ficaram fora das cadeias) que caem numa posição
+    prevista das linhas já usadas ou vizinhas, e a grade é reajustada. Numa
+    foto inclinada, só as linhas perto da câmera formam cadeias, e a grade
+    projetiva tirada só delas erra as linhas do fundo. Devolve (obs, prever)."""
+    def casar(p, ri, ci):
+        x, y = p(ci, ri)
         d = np.hypot(todos[:, 0] - x, todos[:, 1] - y)
         j = int(np.argmin(d))
         ok = d[j] < 0.5 * rmed and 0.6 * rmed < todos[j, 2] < 1.6 * rmed
@@ -304,20 +360,24 @@ def group_rows(circles, n_q, anel):
 
     for _ in range(n_q):
         lo, hi = int(obs[:, 0].min()) - 1, int(obs[:, 0].max()) + 1
-        novos = [c for c in (casar(ri, ci) for ri in range(lo, hi + 1) for ci in range(5)) if c]
+        novos = [c for c in (casar(prever, ri, ci) for ri in range(lo, hi + 1) for ci in range(5)) if c]
         if len(novos) <= len(obs):
             break
         o = np.array(novos, float)
-        p = ajustar(o)
+        p = fit_grid(o, rmed, n_q)
         if p is None:
             break
         obs, prever = o, p
+    return obs, prever
 
-    # forma de cada bolinha: na perspectiva, as bolinhas longe da câmera ficam
-    # menores e achatadas, na mesma proporção dos passos de uma coluna e de
-    # uma linha da grade naquele ponto. As bolinhas detectadas (redondas, de
-    # raio rmed) são a referência. Na grade afim sem inclinação, a forma é o
-    # círculo de raio rmed em toda a tabela.
+
+def grid_shape(obs, prever, rmed):
+    """posicao(ci, ri) -> (x, y, raio equivalente, forma) de cada bolinha.
+    Na perspectiva, as bolinhas longe da câmera ficam menores e achatadas, na
+    mesma proporção dos passos de uma coluna e de uma linha da grade naquele
+    ponto. As bolinhas detectadas (redondas, de raio rmed) são a referência.
+    Na grade afim sem inclinação, a forma é o círculo de raio rmed em toda a
+    tabela."""
     def eixos(ci, ri):
         (x0, y0), (x1, y1) = prever(ci - 0.5, ri), prever(ci + 0.5, ri)
         (x2, y2), (x3, y3) = prever(ci, ri - 0.5), prever(ci, ri + 0.5)
@@ -326,55 +386,40 @@ def group_rows(circles, n_q, anel):
     ref_c = np.median([np.hypot(*e[0]) for e in passos])
     ref_r = np.median([np.hypot(*e[1]) for e in passos])
 
-    def forma(ci, ri):
-        (cx, cy), (rx, ry) = eixos(ci, ri)
-        return (rmed * cx / ref_c, rmed * rx / ref_r, rmed * cy / ref_c, rmed * ry / ref_r)
-
-    # bolinhas detectadas numa linha: posições com algum círculo detectado
-    # perto e de tamanho compatível, inclusive os achatados e os que ficaram
-    # fora das cadeias
-    def detectadas(pos):
-        """Para cada posição, (há um círculo detectado ali, há um redondo)."""
-        achou = []
-        for x, y, r, _ in pos:
-            d = np.hypot(todos[:, 0] - x, todos[:, 1] - y)
-            perto = (d < 0.5 * r) & (todos[:, 2] > 0.6 * r) & (todos[:, 2] < 1.6 * r)
-            achou.append((bool(np.any(perto)), bool(np.any(perto & redondo))))
-        return achou
-
     def posicao(ci, ri):
-        """(x, y, raio equivalente, forma) da bolinha na coluna ci, linha ri."""
         x, y = prever(ci, ri)
-        f = forma(ci, ri)
+        (cx, cy), (rx, ry) = eixos(ci, ri)
+        f = (rmed * cx / ref_c, rmed * rx / ref_r, rmed * cy / ref_c, rmed * ry / ref_r)
         return x, y, float(np.sqrt(abs(f[0] * f[3] - f[1] * f[2]))), f
+    return posicao
 
-    # o professor já informou quantas questões há: escolhe as n_q linhas
-    # seguidas com mais evidência. A evidência de cada linha é o número de
-    # bolinhas detectadas nela mais a pontuação de anel nas 5 posições
-    # previstas. Testa também linhas acima e abaixo das detectadas, porque a
-    # questão 1 (ou a última) pode não ter sido detectada.
-    cand = {}
-    for ri in range(int(obs[:, 0].min()) - n_q, int(obs[:, 0].max()) + n_q + 1):
-        pos = [posicao(ci, ri) for ci in range(5)]
-        sc = [anel(x, y, f) for x, y, _, f in pos]
-        if None in sc:
-            continue  # linha fora da imagem
-        achou = detectadas(pos)
-        # colunas logo antes da A e logo depois da E: com bolinhas redondas,
-        # a grade está uma coluna para o lado (ver suspeita)
-        vizinhas = [red for _, red in detectadas([posicao(-1, ri), posicao(5, ri)])]
-        cand[ri] = (pos, sum(sc), sum(a for a, _ in achou), [a for a, _ in achou] + vizinhas)
+
+def detections(todos, redondo, pos):
+    """Para cada posição (x, y, r, forma), (há um círculo detectado ali, há um
+    redondo): perto (menos de 0,5 r) e de tamanho compatível, inclusive os
+    achatados e os que ficaram fora das cadeias."""
+    achou = []
+    for x, y, r, _ in pos:
+        d = np.hypot(todos[:, 0] - x, todos[:, 1] - y)
+        perto = (d < 0.5 * r) & (todos[:, 2] > 0.6 * r) & (todos[:, 2] < 1.6 * r)
+        achou.append((bool(np.any(perto)), bool(np.any(perto & redondo))))
+    return achou
+
+
+def choose_block(cand, n_q):
+    """10. As n_q linhas seguidas com mais evidência (anel + detectadas).
+    Devolve (primeira linha, linhas a mais), ou None se não couber.
+    Linhas de bolinhas logo acima ou logo abaixo do bloco: a tabela tem mais
+    linhas que o gabarito (ex.: folha de 10 questões com gabarito de 8). Aí a
+    questão 1 é a primeira linha da tabela: o bloco sobe até ela. Vale também
+    a linha fraca que suspeita() aceita: senão, numa foto de longe de uma
+    tabela com linhas a mais, o bloco ficaria onde caiu (a questão 1 lida da
+    2ª linha da tabela) sem aviso."""
     blocks = [k for k in cand if all(k + j in cand for j in range(n_q))]
     if not blocks:
-        return vazio
+        return None
     s0 = max(blocks, key=lambda k: sum(cand[k + j][1] + cand[k + j][2] for j in range(n_q)))
 
-    # linhas de bolinhas logo acima ou logo abaixo do bloco: a tabela tem mais
-    # linhas que o gabarito (ex.: folha de 10 questões com gabarito de 8). Aí
-    # a questão 1 é a primeira linha da tabela: o bloco sobe até ela.
-    # Vale também a linha fraca que suspeita() aceita: senão, numa foto de longe
-    # de uma tabela com linhas a mais, o bloco ficaria onde caiu (a questão 1
-    # lida da 2ª linha da tabela) sem aviso.
     def bolinhas(ri):
         if ri not in cand:
             return False
@@ -385,13 +430,7 @@ def group_rows(circles, n_q, anel):
     extras = 0
     while bolinhas(s0 + n_q + extras):
         extras += 1
-    rows = [[(x, y, r) for x, y, r, _ in cand[ri][0]] for ri in range(s0, s0 + n_q)]
-    rings = [cand[ri][1] for ri in range(s0, s0 + n_q)]
-    dets = [int(cand[ri][2]) for ri in range(s0, s0 + n_q)]
-    # detectadas em cada coluna A a E e redondas nas colunas antes da A e
-    # depois da E
-    cols = [sum(cand[ri][3][ci] for ri in range(s0, s0 + n_q)) for ci in range(7)]
-    return rows, rings, dets, extras, rmed, cols
+    return s0, extras
 
 
 def lattice_angle(circles):
@@ -527,25 +566,32 @@ def read_sheet(path, dbg_path, n_q, target_w=TARGET_W, procurar=False):
     return result
 
 
-def read_image(img, n_q, target_w=TARGET_W, procurar=False):
+def read_image(img, n_q, target_w=TARGET_W, procurar=False, detalhes=None):
     """Lê uma imagem já carregada. Devolve (respostas, imagem de depuração).
     target_w: 1000 para a folha inteira, 800 para o recorte do quadro-guia.
     procurar: foto inteira tirada fora do app; testa as 4 orientações e,
-    se não achar a tabela, uma escala maior (ESCALAS)."""
+    se não achar a tabela, uma escala maior (ESCALAS).
+    detalhes: dicionário que recebe 'aneis', 'detectadas' e 'grade' (posições
+    na largura target_w), para comparar com o app (avaliar.py --detalhes)."""
     melhor = None
     for fator in ESCALAS if procurar else (1,):
-        leitura = read_scaled(img, n_q, target_w * fator, procurar)
+        leitura = read_scaled(img, n_q, target_w * fator, procurar) + (fator,)
         if melhor is None or leitura[2] > melhor[2]:
             melhor = leitura
         if leitura[2] == 2:
             break
+    if detalhes is not None:
+        _, _, _, (rings, dets, rows), fator = melhor
+        detalhes.update(aneis=[float(v) for v in rings], detectadas=list(dets),
+                        grade=[[[float(v) / fator for v in c] for c in row] for row in rows])
     return melhor[0], melhor[1]
 
 
 def read_scaled(img, n_q, target_w, procurar):
-    """Lê na largura target_w. Devolve (respostas, depuração, situação), com
-    situação 2 = tabela lida, 1 = achou a tabela mas pede confirmação de
-    tudo (cortada ou lado incerto), 0 = não achou."""
+    """Lê na largura target_w. Devolve (respostas, depuração, situação,
+    (anéis, detectadas, grade)), com situação 2 = tabela lida, 1 = achou a
+    tabela mas pede confirmação de tudo (cortada ou lado incerto), 0 = não
+    achou."""
     s = target_w / img.shape[1]
     img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
     gray = student_ink_gray(img)
@@ -581,7 +627,7 @@ def read_scaled(img, n_q, target_w, procurar):
         cv2.putText(dbg, f"{qi}:{ans}", (int(xa + (xa - xe) * 0.45), int(ya + (ya - ye) * 0.45 + rmed / 2)),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
     situacao = 0 if not rows else 1 if cortada or incerta else 2
-    return result, dbg, situacao
+    return result, dbg, situacao, (rings, dets, rows)
 
 
 if __name__ == "__main__":

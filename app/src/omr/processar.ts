@@ -103,28 +103,36 @@ function lerNaEscala(
     t = agora
   }
 
-  // 1. reduzir para a largura alvo
-  // Pelo fator de escala, como o cv2.resize(img, None, fx=s, fy=s) do
-  // Python: passar o tamanho final arredonda a escala vertical de outro jeito
-  // e muda os pixels o bastante para virar uma resposta no limite.
-  const escala = larguraAlvo / original.cols
-  const rgba = new cv.Mat()
-  cv.resize(original, rgba, new cv.Size(0, 0), escala, escala, cv.INTER_AREA)
-  const largura = rgba.cols
-  const altura = rgba.rows
-  const rgb = new cv.Mat()
-  const hsv = new cv.Mat()
-  const cinza = new cv.Mat()
-  const verm1 = new cv.Mat()
-  const verm2 = new cv.Mat()
-  const binaria = new cv.Mat()
-  const contornos = new cv.MatVector()
-  const hierarquia = new cv.Mat()
-  const fundo = new cv.Mat()
-  const pequena = new cv.Mat()
-  const kernel = cv.Mat.ones(3, 3, cv.CV_8U)
+  // Toda Mat criada aqui entra na lista e é liberada no finally, mesmo se
+  // uma função do OpenCV lançar um erro no meio.
+  const mats: CV[] = []
+  const nova = <T,>(m: T): T => {
+    mats.push(m)
+    return m
+  }
 
   try {
+    // 1. reduzir para a largura alvo
+    // Pelo fator de escala, como o cv2.resize(img, None, fx=s, fy=s) do
+    // Python: passar o tamanho final arredonda a escala vertical de outro jeito
+    // e muda os pixels o bastante para virar uma resposta no limite.
+    const escala = larguraAlvo / original.cols
+    const rgba = nova(new cv.Mat())
+    cv.resize(original, rgba, new cv.Size(0, 0), escala, escala, cv.INTER_AREA)
+    const largura = rgba.cols
+    const altura = rgba.rows
+    const rgb = nova(new cv.Mat())
+    const hsv = nova(new cv.Mat())
+    const cinza = nova(new cv.Mat())
+    const verm1 = nova(new cv.Mat())
+    const verm2 = nova(new cv.Mat())
+    const binaria = nova(new cv.Mat())
+    const contornos = nova(new cv.MatVector())
+    const hierarquia = nova(new cv.Mat())
+    const fundo = nova(new cv.Mat())
+    const pequena = nova(new cv.Mat())
+    const kernel = nova(cv.Mat.ones(3, 3, cv.CV_8U))
+
     // 2. tinta vermelha do professor vira branco
     const [baixo1, alto1, baixo2, alto2] = limitesDoVermelho(cv, largura, altura)
     cv.cvtColor(rgba, rgb, cv.COLOR_RGBA2RGB)
@@ -218,9 +226,7 @@ function lerNaEscala(
     }
     return { leitura, situacao: !grade ? 0 : tabelaCortada || ladoIncerto ? 1 : 2 }
   } finally {
-    for (const m of [rgba, rgb, hsv, cinza, verm1, verm2, binaria, contornos, hierarquia, fundo, pequena, kernel]) {
-      m.delete()
-    }
+    for (const m of mats) m.delete()
   }
 }
 

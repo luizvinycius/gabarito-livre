@@ -10,6 +10,7 @@ Uso:
     python poc/avaliar.py --csv outro.csv --fotos outra/pasta
     python poc/avaliar.py --conjunto sinteticas   # dataset/sinteticas/ (gerar_sinteticas.py)
     python poc/avaliar.py --leituras py.csv       # grava "arquivo;lido" de cada folha
+    python poc/avaliar.py --detalhes py.jsonl     # grava anéis, detectadas e grade de cada folha
 
 Formato do CSV:
     arquivo,n_questoes,respostas,celular,condicao
@@ -24,6 +25,7 @@ Sai com código 1 se houver algum erro silencioso.
 """
 import argparse
 import csv
+import json
 import os
 import sys
 import time
@@ -95,6 +97,9 @@ def main():
     ap.add_argument('--fotos')
     ap.add_argument('--leituras', metavar='ARQUIVO',
                     help='grava "arquivo;lido" de cada folha (para comparar com o npm run avaliar)')
+    ap.add_argument('--detalhes', metavar='ARQUIVO',
+                    help='grava anéis, bolinhas detectadas e grade de cada folha, uma linha JSON por '
+                         'folha (para comparar com o npm run avaliar: poc/comparar_detalhes.py)')
     ap.add_argument('--depurar', nargs='?', const=os.path.join(AQUI, 'saida'), metavar='PASTA',
                     help='salva a imagem de depuração das folhas com aviso ou erro (padrão: poc/saida/)')
     args = ap.parse_args()
@@ -113,7 +118,7 @@ def main():
 
     total = defaultdict(int)                       # contagem geral por classe
     por_grupo = defaultdict(lambda: defaultdict(int))  # 'celular: X' / 'condição: Y' -> classes
-    silenciosas, faltando, tempos, leituras = [], [], [], []
+    silenciosas, faltando, tempos, leituras, detalhes = [], [], [], [], []
     folhas_certas = folhas_lidas = 0
 
     print(f'{"arquivo":40s} {"esperado":12s} {"lido":12s} resultado')
@@ -128,8 +133,10 @@ def main():
         recorte = folha['arquivo'].startswith('recorte-')
         largura = LARGURA_RECORTE if recorte else LARGURA_FOLHA
         t0 = time.perf_counter()
-        resultado, dbg = poc_bolhas.read_image(img, folha['n'], largura, procurar=not recorte)
+        det = {'arquivo': folha['arquivo']}
+        resultado, dbg = poc_bolhas.read_image(img, folha['n'], largura, procurar=not recorte, detalhes=det)
         tempos.append(time.perf_counter() - t0)
+        detalhes.append(json.dumps(det, ensure_ascii=False))
         folhas_lidas += 1
 
         lido = ''.join(a for _, a, _ in resultado) or '-' * folha['n']  # '-': tabela não encontrada
@@ -161,6 +168,9 @@ def main():
     if args.leituras:
         with open(args.leituras, 'w', encoding='utf-8', newline='\n') as f:
             f.write('\n'.join(leituras) + '\n')
+    if args.detalhes:
+        with open(args.detalhes, 'w', encoding='utf-8', newline='\n') as f:
+            f.write('\n'.join(detalhes) + '\n')
     questoes = sum(total.values())
     print()
     print(f'Folhas lidas: {folhas_lidas} ({folhas_certas} totalmente certas)')
