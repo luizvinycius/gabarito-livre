@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Mensagem, Resposta } from './protocolo'
-import { type Foto, pixelsParaLeitura } from './imagem'
+import { type Foto, pixelsParaLeitura, procurarNaFoto } from './imagem'
 
 export type Leitura = Extract<Resposta, { tipo: 'resultado' }>
 
@@ -55,6 +55,7 @@ export function useLeitor() {
           pixels,
           nQuestoes,
           larguraAlvo: foto.largura,
+          procurar: procurarNaFoto(foto),
         } satisfies Mensagem,
         [pixels],
       )

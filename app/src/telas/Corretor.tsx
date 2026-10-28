@@ -49,6 +49,7 @@ function leituraDaFolha(f: Folha): LeituraTela {
     grade: f.grade,
     respostas: f.lidas.map((letra) => ({ letra, preenchimento: [] })),
     tabelaCortada: false,
+    ladoIncerto: false,
     linhasExtras: 0,
   }
 }

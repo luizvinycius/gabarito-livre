@@ -1,10 +1,25 @@
 // Partes do algoritmo de leitura que não dependem do OpenCV (porte do
-// group_rows e da decisão por linha do poc/poc_bolhas.py, seção 3.4 da
-// documentação). Ficam separadas para poderem ser testadas sem o worker.
+// group_rows, lattice_angle, side_cue, read_grade e da decisão por linha do
+// poc/poc_bolhas.py, seção 3.4 da documentação). Ficam separadas para poderem
+// ser testadas sem o worker.
 
 import type { Circulo } from './protocolo'
 
 const LETRAS = 'ABCDE'
+
+// Círculo detectado. redondo: false para as bolinhas achatadas pela
+// perspectiva, que não montam a grade: só contam como bolinha detectada numa
+// posição que a grade já previu (um "0" do texto da coluna Questão também
+// passaria pelo filtro delas).
+export type Detectado = Circulo & { redondo?: boolean }
+
+// Forma de uma bolinha na foto: o ponto do ângulo t fica em
+// (a cos t + b sin t, c cos t + d sin t) a partir do centro.
+export type Forma = [number, number, number, number]
+export const formaCirculo = (r: number): Forma => [r, 0, 0, r]
+
+// Posição prevista de uma bolinha: centro, raio equivalente e forma.
+export type Posicao = Circulo & { forma: Forma }
 
 function mediana(v: number[]): number {
   const s = [...v].sort((a, b) => a - b)
@@ -24,49 +39,114 @@ function media(v: number[]): number {
   return v.reduce((a, b) => a + b, 0) / v.length
 }
 
-// Mínimos quadrados para z ≈ c0 + c1·coluna + c2·linha (equações normais 3×3).
-function ajustar(obs: Obs[], z: (o: Obs) => number): [number, number, number] {
-  const M = [
-    [0, 0, 0, 0],
-    [0, 0, 0, 0],
-    [0, 0, 0, 0],
-  ]
-  for (const o of obs) {
-    const a = [1, o.coluna, o.linha]
-    for (let i = 0; i < 3; i++) {
-      for (let j = 0; j < 3; j++) M[i][j] += a[i] * a[j]
-      M[i][3] += a[i] * z(o)
-    }
-  }
-  // eliminação de Gauss com pivotamento parcial
-  for (let i = 0; i < 3; i++) {
+// Resolve M·h = b (eliminação de Gauss com pivotamento parcial). Lança um
+// erro se M for singular.
+function resolver(M: number[][], b: number[]): number[] {
+  const n = b.length
+  const A = M.map((linha, i) => [...linha, b[i]])
+  for (let i = 0; i < n; i++) {
     let p = i
-    for (let k = i + 1; k < 3; k++) if (Math.abs(M[k][i]) > Math.abs(M[p][i])) p = k
-    ;[M[i], M[p]] = [M[p], M[i]]
-    if (Math.abs(M[i][i]) < 1e-9) throw new Error('grade degenerada')
-    for (let k = i + 1; k < 3; k++) {
-      const f = M[k][i] / M[i][i]
-      for (let j = i; j < 4; j++) M[k][j] -= f * M[i][j]
+    for (let k = i + 1; k < n; k++) if (Math.abs(A[k][i]) > Math.abs(A[p][i])) p = k
+    ;[A[i], A[p]] = [A[p], A[i]]
+    if (Math.abs(A[i][i]) < 1e-12) throw new Error('grade degenerada')
+    for (let k = i + 1; k < n; k++) {
+      const f = A[k][i] / A[i][i]
+      for (let j = i; j <= n; j++) A[k][j] -= f * A[i][j]
     }
   }
-  const c = [0, 0, 0]
-  for (let i = 2; i >= 0; i--) {
-    let s = M[i][3]
-    for (let j = i + 1; j < 3; j++) s -= M[i][j] * c[j]
-    c[i] = s / M[i][i]
+  const h = new Array<number>(n).fill(0)
+  for (let i = n - 1; i >= 0; i--) {
+    let s = A[i][n]
+    for (let j = i + 1; j < n; j++) s -= A[i][j] * h[j]
+    h[i] = s / A[i][i]
   }
-  return [c[0], c[1], c[2]]
+  return h
+}
+
+// Equações normais (MᵀM)·h = Mᵀb dos mínimos quadrados das linhas de M.
+function minimosQuadrados(linhas: number[][], b: number[]): number[] {
+  const n = linhas[0].length
+  const MtM = Array.from({ length: n }, () => new Array<number>(n).fill(0))
+  const Mtb = new Array<number>(n).fill(0)
+  linhas.forEach((a, k) => {
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) MtM[i][j] += a[i] * a[j]
+      Mtb[i] += a[i] * b[k]
+    }
+  })
+  return resolver(MtM, Mtb)
 }
 
 type Obs = { linha: number; coluna: number; x: number; y: number }
+type Prever = (coluna: number, linha: number) => [number, number]
+
+// Grade afim (coluna, linha) → (x, y). null se os pontos estão todos numa
+// linha ou numa coluna só.
+function ajusteAfim(obs: Obs[]): Prever | null {
+  if (obs.length < 3) return null
+  try {
+    const A = obs.map((o) => [1, o.coluna, o.linha])
+    const cx = minimosQuadrados(A, obs.map((o) => o.x))
+    const cy = minimosQuadrados(A, obs.map((o) => o.y))
+    return (c, l) => [cx[0] + cx[1] * c + cx[2] * l, cy[0] + cy[1] * c + cy[2] * l]
+  } catch {
+    return null
+  }
+}
+
+// Grade projetiva (homografia) (coluna, linha) → (x, y): acompanha a
+// perspectiva de uma foto inclinada, em que as linhas e as colunas mais perto
+// da câmera ficam mais espaçadas (a grade afim escorrega uma linha). Mínimos
+// quadrados lineares (DLT com h33 = 1), como o fit_projective do protótipo.
+// Precisa de pontos em 3 linhas e 3 colunas; null se não der ou se a
+// perspectiva estimada for absurda entre as linhas linhaMin e linhaMax (a
+// grade é prevista até nQuestoes linhas fora das detectadas).
+function ajusteProjetivo(obs: Obs[], rmed: number, linhaMin: number, linhaMax: number): Prever | null {
+  if (obs.length < 6 || new Set(obs.map((o) => o.linha)).size < 3 || new Set(obs.map((o) => o.coluna)).size < 3)
+    return null
+  const mx = media(obs.map((o) => o.x))
+  const my = media(obs.map((o) => o.y))
+  const s = 10 * rmed
+  const linhas: number[][] = []
+  const b: number[] = []
+  for (const { coluna: c, linha: l, x } of obs) {
+    const X = (x - mx) / s
+    linhas.push([c, l, 1, 0, 0, 0, -c * X, -l * X])
+    b.push(X)
+  }
+  for (const { coluna: c, linha: l, y } of obs) {
+    const Y = (y - my) / s
+    linhas.push([0, 0, 0, c, l, 1, -c * Y, -l * Y])
+    b.push(Y)
+  }
+  let h: number[]
+  try {
+    h = minimosQuadrados(linhas, b)
+  } catch {
+    return null
+  }
+  for (const c of [0, 4]) {
+    for (const l of [linhaMin, linhaMax]) {
+      const w = h[6] * c + h[7] * l + 1
+      if (!(w > 0.5 && w < 2)) return null
+    }
+  }
+  return (c, l) => {
+    const w = h[6] * c + h[7] * l + 1
+    return [mx + (s * (h[0] * c + h[1] * l + h[2])) / w, my + (s * (h[3] * c + h[4] * l + h[5])) / w]
+  }
+}
 
 // aneis: pontuação de anel (0 a 5) de cada linha escolhida
 // detectadas: bolinhas detectadas em cada linha escolhida (0 a 5)
+// colunas: bolinhas detectadas em cada coluna A a E do bloco escolhido,
+//   seguidas das redondas na coluna antes da A e na depois da E (7 números)
 // linhasExtras: linhas de bolinhas logo acima ou abaixo do bloco escolhido
 export type Grade = {
   linhas: Circulo[][]
   aneis: number[]
   detectadas: number[]
+  colunas: number[]
   linhasExtras: number
   raio: number
 }
@@ -77,6 +157,11 @@ export type Grade = {
 // e a grade pode estar deslocada: todas as respostas viram '?'.
 // TODO: recalibrar com o conjunto de fotos (poc/avaliar.py).
 export const ANEL_MINIMO = 4.3
+// Linha de bolinhas pequenas ou impressas claras (ver gradeSuspeita): nas
+// fotos de longe ou inclinadas, as linhas da tabela ficaram com anel de 3,5 a
+// 4,3.
+export const ANEL_MINIMO_FRACO = 3.4
+export const DETECTADAS_FRACO = 3
 
 // A pontuação de anel não basta no modelo compacto (grade grossa): lá as
 // linhas de "DISSERTATIVA" e o cabeçalho tiram até 5,0. O que separa uma linha
@@ -87,30 +172,52 @@ export const ANEL_MINIMO = 4.3
 // DETECTADAS_EXTRA bolinhas: a tabela tem mais linhas que o gabarito.
 export const DETECTADAS_EXTRA = 2
 
+// Decisão de cada linha: a segunda bolinha mais escura destaca-se da base mais
+// que DUPLA do destaque da primeira: duas marcadas. Entre DUPLA_DUVIDA e DUPLA
+// (uma segunda marcação mais fraca), é dúvida e o professor confirma; abaixo,
+// é rasura leve e vale a primeira.
+export const DUPLA = 0.6
+export const DUPLA_DUVIDA = 0.4
+
 /**
  * Tabela cortada ou grade deslocada: alguma linha com anel baixo, ou a
  * primeira ou a última linha sem nenhuma bolinha detectada (o bloco
  * provavelmente escorregou para uma linha de texto).
+ * Numa foto de longe ou inclinada, com bolinhas pequenas e impressão clara, o
+ * anel de uma linha da tabela cai abaixo de ANEL_MINIMO. Ela é aceita com anel
+ * a partir de ANEL_MINIMO_FRACO se tiver ao menos DETECTADAS_FRACO bolinhas
+ * detectadas, se cada coluna do bloco tiver bolinhas detectadas em ao menos
+ * metade das linhas e se as colunas logo antes da A e logo depois da E tiverem
+ * bolinhas redondas em menos da metade. Com a grade uma coluna para o lado, a
+ * coluna que caiu fora da tabela fica sem bolinhas, e a coluna da tabela que
+ * ficou de fora do bloco tem as dela.
  */
-export function gradeSuspeita({ aneis, detectadas }: Grade): boolean {
-  return aneis.some((a) => a < ANEL_MINIMO) || detectadas[0] === 0 || detectadas.at(-1) === 0
+export function gradeSuspeita({ aneis, detectadas, colunas }: Grade): boolean {
+  const n = aneis.length
+  const colunasOk =
+    colunas.length === 7 && Math.min(...colunas.slice(0, 5)) * 2 >= n && Math.max(...colunas.slice(5)) * 2 < n
+  const baixo = aneis.some(
+    (a, i) => a < ANEL_MINIMO && !(colunasOk && a >= ANEL_MINIMO_FRACO && detectadas[i] >= DETECTADAS_FRACO),
+  )
+  return baixo || detectadas[0] === 0 || detectadas.at(-1) === 0
 }
 
 /**
  * Estima a grade (nQuestoes linhas × 5 colunas) a partir das bolinhas
  * detectadas, mesmo que algumas faltem, e devolve a posição de TODAS elas.
- * anel(c) diz de 0 a 1 quanto a posição c parece uma bolinha impressa, ou
+ * anel(p) diz de 0 a 1 quanto a posição p parece uma bolinha impressa, ou
  * null se cair fora da imagem. Devolve null se não encontrar a tabela.
  */
 export function agruparLinhas(
-  detectados: Circulo[],
+  detectados: Detectado[],
   nQuestoes: number,
-  anel: (c: Circulo) => number | null,
+  anel: (p: Posicao) => number | null,
 ): Grade | null {
-  if (detectados.length === 0) return null
-  // 5. fica com o tamanho dominante
-  let rmed = mediana(detectados.map((c) => c.r))
-  const circulos = detectados.filter((c) => c.r > 0.75 * rmed && c.r < 1.3 * rmed)
+  // 5. fica com os redondos do tamanho dominante
+  const redondos = detectados.filter((c) => c.redondo !== false)
+  if (redondos.length === 0) return null
+  let rmed = mediana(redondos.map((c) => c.r))
+  const circulos = redondos.filter((c) => c.r > 0.75 * rmed && c.r < 1.3 * rmed)
   rmed = mediana(circulos.map((c) => c.r))
   const n = circulos.length
 
@@ -169,47 +276,118 @@ export function agruparLinhas(
   }
   const centros = grupoX.slice(k0, k0 + 5).map(media)
 
-  // 8. linhas: y médio de cada cadeia dividido pelo espaçamento entre linhas
-  const ys = cadeias.map((g) => media(g.map((c) => c.y))).sort((a, b) => a - b)
-  const rsp = ys.length > 1 ? mediana(ys.slice(1).map((y, i) => y - ys[i])) : 4 * rmed
+  // 8. linhas: as cadeias em ordem de y; cada uma fica round(distância /
+  // espaçamento) linhas depois da anterior. Contar a partir da vizinha, e não
+  // da primeira, aguenta a perspectiva (linhas mais espaçadas perto da câmera).
+  const ordenadas = cadeias
+    .map((g) => ({ g, y: media(g.map((c) => c.y)) }))
+    .sort((a, b) => a.y - b.y)
+  const ys = ordenadas.map((o) => o.y)
+  const rsp = ys.length > 1 ? Math.max(mediana(ys.slice(1).map((y, i) => y - ys[i])), rmed) : 4 * rmed
   let obs: Obs[] = []
-  for (const g of cadeias) {
-    const linha = Math.round((media(g.map((c) => c.y)) - ys[0]) / rsp)
+  let linha = 0
+  ordenadas.forEach(({ g }, k) => {
+    if (k > 0) linha += Math.round((ys[k] - ys[k - 1]) / rsp)
     for (const { x, y } of g) {
       const d = centros.map((cx) => Math.abs(x - cx))
       const coluna = d.indexOf(Math.min(...d))
       if (d[coluna] < sp * 0.35) obs.push({ linha, coluna, x, y })
     }
-  }
+  })
   if (obs.length < 3) return null
 
-  // 9. ajuste afim (linha, coluna) → (x, y), descartando pontos fora do padrão.
-  // Com tudo numa linha ou numa coluna só, não dá para estimar a grade.
-  let cx: [number, number, number]
-  let cy: [number, number, number]
-  try {
-    cx = ajustar(obs, (o) => o.x)
-    cy = ajustar(obs, (o) => o.y)
-  } catch {
-    return null
+  // 9. ajuste (linha, coluna) → (x, y), descartando pontos fora do padrão:
+  // projetivo quando dá, afim quando não. Com tudo numa linha ou numa coluna
+  // só, não dá para estimar a grade.
+  const ajustar = (o: Obs[]) => {
+    const ls = o.map((p) => p.linha)
+    const lo = Math.min(...ls) - nQuestoes
+    const hi = Math.max(...ls) + nQuestoes
+    return ajusteProjetivo(o, rmed, lo, hi) ?? ajusteAfim(o)
   }
-  const prever = (c: [number, number, number], coluna: number, linha: number) =>
-    c[0] + c[1] * coluna + c[2] * linha
   for (let it = 0; it < 3; it++) {
-    const res = obs.map((o) =>
-      Math.hypot(prever(cx, o.coluna, o.linha) - o.x, prever(cy, o.coluna, o.linha) - o.y),
-    )
+    const p = ajustar(obs)
+    if (!p) return null
+    const res = obs.map((o) => {
+      const [x, y] = p(o.coluna, o.linha)
+      return Math.hypot(x - o.x, y - o.y)
+    })
     const limite = Math.max(0.4 * rmed, percentil(res, 90))
     const manter = obs.filter((_, i) => res[i] < limite)
     if (manter.length === obs.length) break
     obs = manter
     if (obs.length < 3) return null
-    try {
-      cx = ajustar(obs, (o) => o.x)
-      cy = ajustar(obs, (o) => o.y)
-    } catch {
-      return null
+  }
+  let prever = ajustar(obs)
+  if (!prever) return null
+
+  // A grade cresce linha a linha: entram os círculos (inclusive os achatados e
+  // os que ficaram fora das cadeias) que caem numa posição prevista das linhas
+  // já usadas ou vizinhas, e a grade é reajustada. Numa foto inclinada, só as
+  // linhas perto da câmera formam cadeias, e a grade projetiva tirada só delas
+  // erra as linhas do fundo.
+  const casar = (p: Prever, l: number, coluna: number): Obs | null => {
+    const [x, y] = p(coluna, l)
+    let j = -1
+    let dj = Infinity
+    detectados.forEach((c, i) => {
+      const d = Math.hypot(c.x - x, c.y - y)
+      if (d < dj) {
+        dj = d
+        j = i
+      }
+    })
+    if (j < 0) return null
+    const c = detectados[j]
+    return dj < 0.5 * rmed && c.r > 0.6 * rmed && c.r < 1.6 * rmed ? { linha: l, coluna, x: c.x, y: c.y } : null
+  }
+  for (let it = 0; it < nQuestoes; it++) {
+    const ls = obs.map((o) => o.linha)
+    const lo = Math.min(...ls) - 1
+    const hi = Math.max(...ls) + 1
+    const novos: Obs[] = []
+    for (let l = lo; l <= hi; l++) {
+      for (let coluna = 0; coluna < 5; coluna++) {
+        const o = casar(prever, l, coluna)
+        if (o) novos.push(o)
+      }
     }
+    if (novos.length <= obs.length) break
+    const p = ajustar(novos)
+    if (!p) break
+    obs = novos
+    prever = p
+  }
+  const grade: Prever = prever
+
+  // Forma de cada bolinha: na perspectiva, as bolinhas longe da câmera ficam
+  // menores e achatadas, na mesma proporção dos passos de uma coluna e de uma
+  // linha da grade naquele ponto. As bolinhas detectadas (redondas, de raio
+  // rmed) são a referência. Na grade afim sem inclinação, a forma é o círculo
+  // de raio rmed em toda a tabela.
+  const eixos = (c: number, l: number) => {
+    const [x0, y0] = grade(c - 0.5, l)
+    const [x1, y1] = grade(c + 0.5, l)
+    const [x2, y2] = grade(c, l - 0.5)
+    const [x3, y3] = grade(c, l + 0.5)
+    return [x1 - x0, y1 - y0, x3 - x2, y3 - y2]
+  }
+  const passos = obs.map((o) => eixos(o.coluna, o.linha))
+  const refColuna = mediana(passos.map(([cx, cy]) => Math.hypot(cx, cy)))
+  const refLinha = mediana(passos.map(([, , lx, ly]) => Math.hypot(lx, ly)))
+  const posicao = (c: number, l: number): Posicao => {
+    const [x, y] = grade(c, l)
+    const [cx, cy, lx, ly] = eixos(c, l)
+    const forma: Forma = [(rmed * cx) / refColuna, (rmed * lx) / refLinha, (rmed * cy) / refColuna, (rmed * ly) / refLinha]
+    return { x, y, r: Math.sqrt(Math.abs(forma[0] * forma[3] - forma[1] * forma[2])), forma }
+  }
+
+  // Bolinhas detectadas numa linha: posições com algum círculo detectado
+  // perto e de tamanho compatível, inclusive os achatados e os que ficaram
+  // fora das cadeias. redondo: algum deles é redondo.
+  const detectada = ({ x, y, r }: Circulo) => {
+    const perto = detectados.filter((c) => Math.hypot(c.x - x, c.y - y) < 0.5 * r && c.r > 0.6 * r && c.r < 1.6 * r)
+    return { algum: perto.length > 0, redondo: perto.some((c) => c.redondo !== false) }
   }
 
   // 10. o professor já informou quantas questões há: escolhe as nQuestoes
@@ -220,19 +398,17 @@ export function agruparLinhas(
   const linhasObs = obs.map((o) => o.linha)
   const rMin = Math.min(...linhasObs)
   const rMax = Math.max(...linhasObs)
-  const detectadas = new Map<number, number>()
-  for (const l of linhasObs) detectadas.set(l, (detectadas.get(l) ?? 0) + 1)
-  const candidatas = new Map<number, { pos: Circulo[]; anel: number; det: number }>()
-  for (let linha = rMin - nQuestoes; linha <= rMax + nQuestoes; linha++) {
-    const pos = [0, 1, 2, 3, 4].map((coluna) => ({
-      x: prever(cx, coluna, linha),
-      y: prever(cy, coluna, linha),
-      r: rmed,
-    }))
+  const candidatas = new Map<number, { pos: Posicao[]; anel: number; det: number; achou: boolean[] }>()
+  for (let l = rMin - nQuestoes; l <= rMax + nQuestoes; l++) {
+    const pos = [0, 1, 2, 3, 4].map((c) => posicao(c, l))
     const notas = pos.map(anel)
-    if (notas.some((n) => n === null)) continue // linha fora da imagem
+    if (notas.some((nota) => nota === null)) continue // linha fora da imagem
     const soma = (notas as number[]).reduce((a, b) => a + b, 0)
-    candidatas.set(linha, { pos, anel: soma, det: detectadas.get(linha) ?? 0 })
+    const achou = pos.map((p) => detectada(p).algum)
+    // colunas logo antes da A e logo depois da E: com bolinhas redondas, a
+    // grade está uma coluna para o lado (ver gradeSuspeita)
+    const vizinhas = [posicao(-1, l), posicao(5, l)].map((p) => detectada(p).redondo)
+    candidatas.set(l, { pos, anel: soma, det: achou.filter(Boolean).length, achou: [...achou, ...vizinhas] })
   }
   let s0: number | null = null
   let melhor = -Infinity
@@ -254,9 +430,13 @@ export function agruparLinhas(
   // Linhas de bolinhas logo acima ou logo abaixo do bloco: a tabela tem mais
   // linhas que o gabarito (ex.: folha de 10 questões com gabarito de 8). Aí a
   // questão 1 é a primeira linha da tabela: o bloco sobe até ela.
-  const temBolinhas = (linha: number) => {
-    const c = candidatas.get(linha)
-    return !!c && c.anel >= ANEL_MINIMO && c.det >= DETECTADAS_EXTRA
+  // Vale também a linha fraca que gradeSuspeita aceita: senão, numa foto de
+  // longe de uma tabela com linhas a mais, o bloco ficaria onde caiu (a
+  // questão 1 lida da 2ª linha da tabela) sem aviso.
+  const temBolinhas = (l: number) => {
+    const c = candidatas.get(l)
+    if (!c) return false
+    return (c.anel >= ANEL_MINIMO && c.det >= DETECTADAS_EXTRA) || (c.anel >= ANEL_MINIMO_FRACO && c.det >= DETECTADAS_FRACO)
   }
   let inicio = s0
   while (temBolinhas(inicio - 1)) inicio--
@@ -265,12 +445,147 @@ export function agruparLinhas(
   const escolhidas = Array.from({ length: nQuestoes }, (_, j) => candidatas.get(inicio + j)!)
 
   return {
-    linhas: escolhidas.map((c) => c.pos),
+    linhas: escolhidas.map((c) => c.pos.map(({ x, y, r }) => ({ x, y, r }))),
     aneis: escolhidas.map((c) => c.anel),
     detectadas: escolhidas.map((c) => c.det),
+    colunas: [0, 1, 2, 3, 4, 5, 6].map((k) => escolhidas.filter((c) => c.achou[k]).length),
     linhasExtras,
     raio: rmed,
   }
+}
+
+/**
+ * Ângulo (em radianos, de -45° a 45°) dos eixos da grade de bolinhas na foto,
+ * pela direção de cada bolinha até a vizinha mais próxima. Como as linhas e as
+ * colunas são perpendiculares, a média é feita sobre 4 vezes o ângulo, que dá
+ * o mesmo valor para as 4 direções da grade.
+ */
+export function anguloDaGrade(detectados: Detectado[]): number {
+  const redondos = detectados.filter((c) => c.redondo !== false)
+  if (redondos.length === 0) return 0
+  const rmed = mediana(redondos.map((c) => c.r))
+  const pts = redondos.filter((c) => c.r > 0.75 * rmed && c.r < 1.3 * rmed)
+  let s4 = 0
+  let c4 = 0
+  pts.forEach((p, i) => {
+    let dx = 0
+    let dy = 0
+    let bd = 1e9
+    pts.forEach((q, j) => {
+      const d = Math.hypot(q.x - p.x, q.y - p.y)
+      if (j !== i && d < bd) {
+        dx = q.x - p.x
+        dy = q.y - p.y
+        bd = d
+      }
+    })
+    if (bd > 2 * rmed && bd < 12 * rmed) {
+      const t = Math.atan2(dy, dx)
+      s4 += Math.sin(4 * t)
+      c4 += Math.cos(4 * t)
+    }
+  })
+  return s4 || c4 ? Math.atan2(s4, c4) / 4 : 0
+}
+
+// Pista do lado da folha (pistaDoLado): a orientação certa tira a pista mais
+// alta. Nas fotos e no conjunto sintético, ela ficou entre 0,3 e 1,0 na
+// orientação certa e com o sinal trocado de cabeça para baixo. Abaixo de
+// PISTA_MINIMA não dá para saber o lado da folha, e todas as respostas viram
+// '?'.
+export const PISTA_MINIMA = 0.1
+const LADO_DISTANCIAS = [1.3, 1.7, 2.1]
+const LADO_PASSOS = Array.from({ length: 21 }, (_, i) => 0.25 + 0.025 * i)
+// A foto como está (sem girar 90° ou 180°) só perde para outra orientação se
+// a pista dela for maior por mais que esta margem.
+const MARGEM_EM_PE = 0.05
+
+/**
+ * Pista do lado da folha: as linhas que separam as questões continuam pela
+ * coluna "Questão", que fica do lado da coluna A; do lado da E, depois da
+ * borda da tabela, não há linha nenhuma. Para cada vão entre duas linhas da
+ * grade, mede o contraste (mais escuro menos mais claro) no meio do caminho
+ * entre elas, a 1,3, 1,7 e 2,1 colunas antes da A e depois da E. Devolve o
+ * contraste do lado da A menos o do lado da E: positivo com a folha na
+ * orientação certa, negativo de cabeça para baixo. A borda do papel ou a mesa,
+ * paralelas às colunas, não criam esse contraste.
+ * escuro(px, py): escuridão (0 a 1) do pixel, ou null fora da imagem.
+ */
+export function pistaDoLado(linhas: Circulo[][], escuro: (px: number, py: number) => number | null): number {
+  const lado = (col: number, sinal: number): number | null => {
+    const vals: number[] = []
+    for (let i = 0; i + 1 < linhas.length; i++) {
+      const a = linhas[i]
+      const b = linhas[i + 1]
+      const ux = (a[4].x - a[0].x) / 4
+      const uy = (a[4].y - a[0].y) / 4
+      const { x: x0, y: y0 } = a[col]
+      const { x: x1, y: y1 } = b[col]
+      for (const t of LADO_DISTANCIAS) {
+        const ox = x0 + sinal * t * ux
+        const oy = y0 + sinal * t * uy
+        const perfil: number[] = []
+        for (const s of LADO_PASSOS) {
+          const e = escuro(Math.trunc(ox + (x1 - x0) * s), Math.trunc(oy + (y1 - y0) * s))
+          if (e === null) break
+          perfil.push(e)
+        }
+        if (perfil.length === LADO_PASSOS.length) vals.push(Math.max(...perfil) - Math.min(...perfil))
+      }
+    }
+    return vals.length ? media(vals) : null
+  }
+  // Um lado fora da foto (tabela encostada na borda) conta como sem linhas:
+  // se o lado que sobrou é o da A, a pista continua clara; se é o da E, fica
+  // perto de 0 e a leitura pede confirmação.
+  return (lado(0, -1) ?? 0) - (lado(4, 1) ?? 0)
+}
+
+/**
+ * Grade da tabela nas 4 orientações (procurar) ou só na foto como está.
+ * anel(x, y, forma): pontuação de anel da posição na imagem.
+ * escuro(px, py): escuridão do pixel, para a pista do lado da folha.
+ * ladoIncerto: achou a tabela, mas não o lado da folha.
+ */
+export function lerGrade(
+  detectados: Detectado[],
+  nQuestoes: number,
+  anel: (x: number, y: number, forma: Forma) => number | null,
+  escuro: (px: number, py: number) => number | null,
+  procurar: boolean,
+): { grade: Grade | null; ladoIncerto: boolean } {
+  // A grade é montada com as posições giradas de -a; o anel e as posições
+  // finais voltam para a imagem girando de +a.
+  const naOrientacao = (a: number) => {
+    const cos = Math.cos(a)
+    const sin = Math.sin(a)
+    const girados = detectados.map((c) => ({ ...c, x: c.x * cos + c.y * sin, y: -c.x * sin + c.y * cos }))
+    const g = agruparLinhas(girados, nQuestoes, ({ x, y, forma: [fa, fb, fc, fd] }) =>
+      anel(x * cos - y * sin, x * sin + y * cos, [
+        fa * cos - fc * sin,
+        fb * cos - fd * sin,
+        fa * sin + fc * cos,
+        fb * sin + fd * cos,
+      ]),
+    )
+    const grade = g && {
+      ...g,
+      linhas: g.linhas.map((linha) => linha.map(({ x, y, r }) => ({ x: x * cos - y * sin, y: x * sin + y * cos, r }))),
+    }
+    const valida = !!grade && !gradeSuspeita(grade)
+    const pista = grade && valida && procurar ? pistaDoLado(grade.linhas, escuro) : 0
+    return { grade, valida, pista }
+  }
+
+  if (!procurar) return { grade: naOrientacao(0).grade, ladoIncerto: false }
+  const phi = anguloDaGrade(detectados)
+  const tentativas = [0, 1, 2, 3].map((k) => naOrientacao(phi + (k * Math.PI) / 2))
+  const validas = [0, 1, 2, 3].filter((k) => tentativas[k].valida)
+  if (validas.length === 0) return { grade: tentativas[0].grade, ladoIncerto: false }
+  let k = validas.reduce((m, i) => (tentativas[i].pista > tentativas[m].pista ? i : m))
+  // na dúvida pequena, a foto como está
+  if (validas.includes(0) && tentativas[0].pista >= tentativas[k].pista - MARGEM_EM_PE) k = 0
+  return { grade: tentativas[k].grade, ladoIncerto: tentativas[k].pista < PISTA_MINIMA }
 }
 
 /**
@@ -284,6 +599,7 @@ export function decidir(preenchimento: number[]): string {
   const base = mediana(preenchimento)
   const vao = topo - base
   if (vao < 0.15) return '?'
-  if (segundo - base > 0.6 * vao) return '*'
+  if (segundo - base > DUPLA * vao) return '*'
+  if (segundo - base > DUPLA_DUVIDA * vao) return '?' // forte demais para rasura: o professor confirma
   return LETRAS[ordem[0]]
 }

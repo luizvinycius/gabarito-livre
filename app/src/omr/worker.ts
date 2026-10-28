@@ -36,7 +36,7 @@ escopo.onmessage = async (e: MessageEvent<Mensagem>) => {
     const msg = e.data
     if (msg.tipo === 'carregar') await carregar()
     else if (!cv) throw new Error('OpenCV ainda não carregou')
-    else responder(processar(cv, msg.largura, msg.altura, msg.pixels, msg.nQuestoes, msg.larguraAlvo))
+    else responder(processar(cv, msg.largura, msg.altura, msg.pixels, msg.nQuestoes, msg.larguraAlvo, msg.procurar))
   } catch (err) {
     responder({ tipo: 'erro', mensagem: err instanceof Error ? err.message : String(err) })
   }

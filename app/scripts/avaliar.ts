@@ -118,11 +118,14 @@ async function main() {
     // rotate() sem argumento aplica a orientação do EXIF, como o cv2.imread
     const { data, info } = await sharp(caminho).rotate().ensureAlpha().raw().toBuffer({ resolveWithObject: true })
     const pixels = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
-    const largura = folha.arquivo.startsWith('recorte-') ? LARGURA_RECORTE : LARGURA_FOLHA
+    // o recorte do quadro-guia já vem em pé e no tamanho certo; a folha
+    // inteira pode estar girada ou pequena na foto (procurar)
+    const recorte = folha.arquivo.startsWith('recorte-')
+    const largura = recorte ? LARGURA_RECORTE : LARGURA_FOLHA
     const t0 = performance.now()
     let r: ReturnType<typeof processar>
     try {
-      r = processar(cv, info.width, info.height, pixels, folha.n, largura)
+      r = processar(cv, info.width, info.height, pixels, folha.n, largura, !recorte)
     } catch (err) {
       // no app, o worker devolve o erro e a tela mostra "Não consegui ler"
       r = { tipo: 'erro', mensagem: err instanceof Error ? err.message : String(err) }
@@ -130,7 +133,7 @@ async function main() {
     tempos.push(performance.now() - t0)
     if (r.tipo === 'erro') console.log(`   ERRO em ${folha.arquivo}: ${r.mensagem}`)
     if (r.tipo === 'pronto') throw new Error(`resposta inesperada em ${folha.arquivo}`)
-    if (r.tipo === 'erro') r = { tipo: 'resultado', tempos: {}, total: 0, contornos: 0, circulos: [], grade: null, tabelaCortada: false, linhasExtras: 0, aneis: [], detectadas: [], respostas: [] }
+    if (r.tipo === 'erro') r = { tipo: 'resultado', tempos: {}, total: 0, contornos: 0, circulos: [], grade: null, tabelaCortada: false, ladoIncerto: false, linhasExtras: 0, aneis: [], detectadas: [], respostas: [] }
 
     // '-': tabela não encontrada; linhas a mais: o app pede para conferir
     const lido = r.linhasExtras
