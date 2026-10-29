@@ -11,6 +11,23 @@ const PARADA = 0.35
 
 type LeituraQuadro = Pick<Leitura, 'grade' | 'respostas' | 'tabelaCortada' | 'linhasExtras'>
 
+// Uma leitura do quadro ao vivo, para o log da captura (página de teste):
+// quando foi (ms desde que a câmera abriu), o estado em que o quadro ficou, o
+// que foi lido e os tamanhos do vídeo e do recorte.
+export type TentativaQuadro = {
+  ms: number
+  estado: EstadoQuadro | 'erro'
+  letras: string
+  aneis: number[]
+  detectadas: number[]
+  tabelaCortada: boolean
+  linhasExtras: number
+  tempoLeitura: number
+  video: [number, number]
+  recorte: [number, number]
+  erro?: string
+}
+
 // Avalia uma leitura do quadro ao vivo: 'segure' quando a tabela inteira
 // está no quadro e pode ser capturada.
 export function avaliarQuadro(r: LeituraQuadro, nQuestoes: number): EstadoQuadro {

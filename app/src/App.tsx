@@ -1,5 +1,6 @@
 // O app do professor (Corretor) e, no endereço com #teste, a página de teste
-// da leitura para o grupo (tempos, relatório e "Salvar recorte").
+// da leitura para o grupo (tempos, relatório, "Salvar recorte" e o envio das
+// capturas para o repositório privado).
 
 import { useEffect, useState } from 'react'
 import Corretor from './telas/Corretor'

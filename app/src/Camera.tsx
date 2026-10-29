@@ -12,7 +12,7 @@
 // vezes.
 
 import { useEffect, useRef, useState } from 'react'
-import { type EstadoQuadro, avaliarQuadro, parada } from './captura'
+import { type EstadoQuadro, type TentativaQuadro, avaliarQuadro, parada } from './captura'
 import type { Leitura } from './omr/useLeitor'
 
 // Proporções da tabela da Univag. A altura aparente de cada linha muda muito
@@ -70,9 +70,19 @@ type Props = {
   // leitura: a da captura automática, para não ler a mesma imagem de novo
   onCapturar: (recorte: HTMLCanvasElement, leitura?: Leitura) => void
   onFechar: () => void
+  // cada leitura do quadro ao vivo (log da captura, na página de teste)
+  onTentativa?: (t: TentativaQuadro) => void
 }
 
-export default function Camera({ nQuestoes, visivel, exigirTroca, analisar, onCapturar, onFechar }: Props) {
+export default function Camera({
+  nQuestoes,
+  visivel,
+  exigirTroca,
+  analisar,
+  onCapturar,
+  onFechar,
+  onTentativa,
+}: Props) {
   const video = useRef<HTMLVideoElement>(null)
   const [tamanho, setTamanho] = useState<{ w: number; h: number } | null>(null)
   const [erro, setErro] = useState<string | null>(null)
@@ -198,9 +208,11 @@ export default function Camera({ nQuestoes, visivel, exigirTroca, analisar, onCa
   // as mais novas.
   const recortarAtual = useRef(recortar)
   const entregarAtual = useRef(entregar)
+  const tentativaAtual = useRef(onTentativa)
   useEffect(() => {
     recortarAtual.current = recortar
     entregarAtual.current = entregar
+    tentativaAtual.current = onTentativa
   })
 
   const autoLigado = visivel && automatico && !!analisar && !!tamanho
@@ -210,6 +222,22 @@ export default function Camera({ nQuestoes, visivel, exigirTroca, analisar, onCa
     const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms))
     async function laco() {
       let anterior: Leitura | null = null
+      const inicio = performance.now()
+      // registra a leitura no log da captura (se a tela pediu)
+      const registrar = (recorte: HTMLCanvasElement, estado: TentativaQuadro['estado'], r?: Leitura, erro?: string) =>
+        tentativaAtual.current?.({
+          ms: Math.round(performance.now() - inicio),
+          estado,
+          letras: r?.respostas.map((x) => x.letra).join('') ?? '',
+          aneis: r?.aneis.map((a) => Math.round(a * 100) / 100) ?? [],
+          detectadas: r?.detectadas ?? [],
+          tabelaCortada: r?.tabelaCortada ?? false,
+          linhasExtras: r?.linhasExtras ?? 0,
+          tempoLeitura: Math.round(r ? r.total + r.preparo : 0),
+          video: [video.current?.videoWidth ?? 0, video.current?.videoHeight ?? 0],
+          recorte: [recorte.width, recorte.height],
+          ...(erro ? { erro } : {}),
+        })
       await esperar(0)
       setEstado('procurando')
       while (ativo) {
@@ -221,7 +249,8 @@ export default function Camera({ nQuestoes, visivel, exigirTroca, analisar, onCa
         let r: Leitura
         try {
           r = await analisar!(recorte)
-        } catch {
+        } catch (err) {
+          registrar(recorte, 'erro', undefined, err instanceof Error ? err.message : String(err))
           await esperar(500)
           continue
         }
@@ -232,20 +261,24 @@ export default function Camera({ nQuestoes, visivel, exigirTroca, analisar, onCa
           if (avaliacao === 'procurando') armada.current = true
           anterior = null
           setEstado(avaliacao)
+          registrar(recorte, avaliacao, r)
         } else {
           const letras = r.respostas.map((x) => x.letra).join('')
           if (!armada.current && letras !== ultimaCaptura.current) armada.current = true
           if (!armada.current) {
             anterior = null
             setEstado('troque')
+            registrar(recorte, 'troque', r)
           } else if (anterior && parada(anterior, r)) {
             setEstado('encaixou')
+            registrar(recorte, 'encaixou', r)
             navigator.vibrate?.(60)
             entregarAtual.current(recorte, r)
             return
           } else {
             anterior = r
             setEstado('segure')
+            registrar(recorte, 'segure', r)
           }
         }
         await esperar(PAUSA)

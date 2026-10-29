@@ -2,7 +2,12 @@
 
 Atualizado em 28/10/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
 
-## Onde paramos (29/10, noite)
+## Onde paramos (29/10, envio de capturas)
+- **Página de teste envia a captura para um repositório privado (3.5):** `gabarito-livre-capturas` (privado: pode ter prova real). Vai a imagem que a leitura recebeu e um `dados.json` com a leitura, a grade, os tempos, o aparelho, a versão do app e o **log do quadro ao vivo** (cada leitura até a captura e o estado do quadro). A página de teste ganhou a captura automática do app (o mesmo leitor, um OpenCV só). O mesmo token *fine-grained* serve para vários celulares; o apelido de cada aparelho vai no nome da pasta (`HHMMSS-8q-iphone-11`). Repositório público é recusado. Testado: envio real pelo PC (imagem idêntica, apagada depois) e, no navegador, a chamada à API e a recusa do token inválido. **Testes Vitest:** 87.
+- [ ] **Testar o envio no iPhone** com um token de verdade e mandar as capturas das folhas que deram trabalho, com as respostas reais.
+- [x] **Folha amassada no quadro-guia** (que dava "A tabela está saindo do quadro"): lida desde o PR #4, testado no iPhone.
+
+### Antes (29/10, noite)
 - **Folha curvada (3.4, passos 6 e 9):** correção por coluna sobre a homografia, ajuste alternado, resgate de coluna inteira deslocada (inclusive quando falta a A nas cadeias), cadeia que não atravessa para a linha de baixo e pista do lado na direção local. A `r-07` passou de tudo `?` a 10 de 10 (uma em branco com aviso); a `r-02` e a `r-11` continuam pedindo outra foto (3.6).
 - **Conjunto sintético com folha curvada:** 12 imagens novas (arco e borda enrolada, 101 no total); de 75,9% para **100%** de questões certas nelas. As 89 de antes continuam iguais (sementes mantidas).
 - **Resultado:** dataset (57 fotos) 65,2% → **66,9%**; sintético 92,3% → **94,1%**; **0 erro silencioso** nos dois, com Python e app idênticos (leituras e valores intermediários). Univag Q8 passou de C a `?` (rabisco no B perto do limite de dúvida). Tempo do app igual (~245 ms por folha no PC). **Testes Vitest:** 75.

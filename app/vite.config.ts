@@ -1,12 +1,23 @@
+import { execSync } from 'node:child_process'
 import react from '@vitejs/plugin-react'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Versão do app (commit do build), gravada nas capturas da página de teste.
+function versao() {
+  try {
+    return execSync('git rev-parse --short HEAD').toString().trim()
+  } catch {
+    return 'dev'
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   // No GitHub Pages o app fica em /<repositório>/ (o workflow passa BASE).
   base: process.env.BASE ?? '/',
+  define: { __VERSAO__: JSON.stringify(versao()) },
   plugins: [
     react(),
     // HTTPS com certificado próprio: a câmera do celular só funciona em HTTPS.
