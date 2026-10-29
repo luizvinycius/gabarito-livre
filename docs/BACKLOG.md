@@ -2,12 +2,17 @@
 
 Atualizado em 28/10/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
 
-## Onde paramos (29/10)
+## Onde paramos (29/10, noite)
+- **Folha curvada (3.4, passos 6 e 9):** correção por coluna sobre a homografia, ajuste alternado, resgate de coluna inteira deslocada (inclusive quando falta a A nas cadeias), cadeia que não atravessa para a linha de baixo e pista do lado na direção local. A `r-07` passou de tudo `?` a 10 de 10 (uma em branco com aviso); a `r-02` e a `r-11` continuam pedindo outra foto (3.6).
+- **Conjunto sintético com folha curvada:** 12 imagens novas (arco e borda enrolada, 101 no total); de 75,9% para **100%** de questões certas nelas. As 89 de antes continuam iguais (sementes mantidas).
+- **Resultado:** dataset (57 fotos) 65,2% → **66,9%**; sintético 92,3% → **94,1%**; **0 erro silencioso** nos dois, com Python e app idênticos (leituras e valores intermediários). Univag Q8 passou de C a `?` (rabisco no B perto do limite de dúvida). Tempo do app igual (~245 ms por folha no PC). **Testes Vitest:** 75.
+- [x] **Correção em vermelho do professor com a regra nova (fotos do coordenador, fora do repositório):** 2 provas com vistos em vermelho lidas certas; com os vistos colados por cima das bolinhas vazias, a mesma leitura do código antigo, sem erro silencioso.
+
+### Antes (29/10, tarde)
 - **48 fotos novas do grupo** (`dataset/fotos/`): `r-01` a `r-12` (recortes das folhas com 4 tabelas), `lo-01` a `lo-12` e dois lotes GS, `gs-b-*` (18h15) e `gs-c-*` (19h53), com nomes por lote porque os códigos se repetem e alguns estão ilegíveis. As 4 fotos de lado ou de cabeça para baixo foram giradas; as tortas ficaram como estavam; 3 fotos repetidas ficaram de fora. As respostas foram anotadas olhando cada tabela ampliada, sem ver a leitura do app, e conferidas nas questões em que o app leu uma letra.
 - **3 correções na leitura (3.4), no Python e no app:** a caneta escura numa luz quente (marrom) e a caneta rosa não são mais apagadas como vermelho do professor (havia **1 erro silencioso**, `gs-b-05` Q6); a pista do lado ignora a mesa e o piso em volta da folha (fotos em pé e nítidas davam tudo `?`); tabela pequena com as bolinhas detectadas é aceita com anel borrado.
 - **Resultado, dataset inteiro (57 fotos, 508 questões):** antes 57,1% certas e 1 erro silencioso; agora **65,2% certas e 0 erro silencioso**. Conjunto sintético: 87,7% → **93,4%**, 0 erro silencioso; a luz amarela, que não era lida, passou a ser. Python e app leram igual em todas as imagens, com os mesmos valores intermediários. **Testes Vitest:** 72. Tempo por folha no PC igual ao de antes (~460 ms nas fotos novas, que mais vezes precisam da imagem 2× maior).
-- [ ] **Conferir a Prova 2 (correção em vermelho do professor, fora do repositório)** com a regra nova do vermelho: as partes escuras da caneta vermelha não podem virar marcação. `python poc/poc_bolhas.py 8 prova2.jpg`.
-- **O que ainda dá `?` (com aviso, nunca nota errada):** folha curvada (`r-02`, `r-07`, `r-11`; a grade projetiva supõe papel plano), foto muito inclinada, escura ou de muito longe (7 fotos em que a tabela nem é encontrada), lápis fraco de longe e caneta vermelha do aluno. Próximos candidatos: grade que acompanha a curvatura (ajuste por coluna) e, para as inclinadas, a busca com escala 3×.
+- **O que ainda dá `?` (com aviso, nunca nota errada):** foto muito inclinada, escura ou de muito longe (7 fotos em que a tabela nem é encontrada), lápis fraco de longe, caneta vermelha do aluno e 2 folhas curvadas (`r-02`, `r-11`). Próximo candidato: para as inclinadas, a busca com escala 3×.
 
 ### Antes (28/10)
 - **Primeiras fotos reais do grupo:** 8 folhas (`dataset/fotos/GS-01` a `GS-08`), mandadas pelo WhatsApp (1280 × 720): deitadas, giradas, inclinadas e de longe. Antes, 14 de 76 questões certas; agora 63, **0 erro silencioso**. A GS-07 (tabela com ~200 px na foto) ainda não é lida: o app pede outra foto.
@@ -72,7 +77,7 @@ Atualizado em 28/10/2026. O contexto de cada item está na [documentação do pr
 - [ ] **Aquecer a primeira captura da câmera:** "preparar foto" levou 1,6 s na primeira vez no A32.
 - [ ] **Remover vermelho:** testar usar só o canal R da imagem, que é mais simples e mais rápido. Validar com o `avaliar.py`.
 - [x] **Tabela com uma linha a mais ou a menos** que o gabarito: avisa nos dois casos (3.4, passo 10). (21/10)
-- [ ] **Luz muito amarela:** resolvida no conjunto sintético e nas fotos do grupo pela regra do vermelho claro (29/10, 3.4 passo 2); falta conferir na Prova 2.
+- [x] **Luz muito amarela:** resolvida no conjunto sintético e nas fotos do grupo pela regra do vermelho claro (29/10, 3.4 passo 2), conferida em 2 provas reais com correção em vermelho.
 
 ## Semana 4: piloto e entrega
 - [x] **Deploy no GitHub Pages:** https://luizvinycius.github.io/gabarito-livre/ (21/10).
