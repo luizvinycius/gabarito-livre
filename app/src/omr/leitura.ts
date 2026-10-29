@@ -162,6 +162,16 @@ export const ANEL_MINIMO = 4.3
 // 4,3.
 export const ANEL_MINIMO_FRACO = 3.4
 export const DETECTADAS_FRACO = 3
+// Tabela pequena na foto (lida com a imagem 2x maior): o anel borra e as
+// linhas da tabela ficaram com 2,7 a 3,4, mesmo com as 5 bolinhas detectadas
+// em todas. Com ao menos DETECTADAS_FORTE detectadas, basta ANEL_MINIMO_DETECTADAS.
+export const ANEL_MINIMO_DETECTADAS = 2.5
+export const DETECTADAS_FORTE = 4
+
+// Linha da tabela com anel abaixo de ANEL_MINIMO, mas com bolinhas detectadas
+// bastantes para o anel dela (ver gradeSuspeita).
+const linhaFracaOk = (anel: number, det: number) =>
+  (anel >= ANEL_MINIMO_FRACO && det >= DETECTADAS_FRACO) || (anel >= ANEL_MINIMO_DETECTADAS && det >= DETECTADAS_FORTE)
 
 // A pontuação de anel não basta no modelo compacto (grade grossa): lá as
 // linhas de "DISSERTATIVA" e o cabeçalho tiram até 5,0. O que separa uma linha
@@ -188,7 +198,8 @@ export const DUPLA_DUVIDA = 0.4
  * a partir de ANEL_MINIMO_FRACO se tiver ao menos DETECTADAS_FRACO bolinhas
  * detectadas, se cada coluna do bloco tiver bolinhas detectadas em ao menos
  * metade das linhas e se as colunas logo antes da A e logo depois da E tiverem
- * bolinhas redondas em menos da metade. Com a grade uma coluna para o lado, a
+ * bolinhas redondas em menos da metade; com DETECTADAS_FORTE detectadas, a
+ * partir de ANEL_MINIMO_DETECTADAS. Com a grade uma coluna para o lado, a
  * coluna que caiu fora da tabela fica sem bolinhas, e a coluna da tabela que
  * ficou de fora do bloco tem as dela.
  */
@@ -196,9 +207,7 @@ export function gradeSuspeita({ aneis, detectadas, colunas }: Grade): boolean {
   const n = aneis.length
   const colunasOk =
     colunas.length === 7 && Math.min(...colunas.slice(0, 5)) * 2 >= n && Math.max(...colunas.slice(5)) * 2 < n
-  const baixo = aneis.some(
-    (a, i) => a < ANEL_MINIMO && !(colunasOk && a >= ANEL_MINIMO_FRACO && detectadas[i] >= DETECTADAS_FRACO),
-  )
+  const baixo = aneis.some((a, i) => a < ANEL_MINIMO && !(colunasOk && linhaFracaOk(a, detectadas[i])))
   return baixo || detectadas[0] === 0 || detectadas.at(-1) === 0
 }
 
@@ -495,7 +504,7 @@ function escolherBloco(
   const temBolinhas = (l: number) => {
     const c = candidatas.get(l)
     if (!c) return false
-    return (c.anel >= ANEL_MINIMO && c.det >= DETECTADAS_EXTRA) || (c.anel >= ANEL_MINIMO_FRACO && c.det >= DETECTADAS_FRACO)
+    return (c.anel >= ANEL_MINIMO && c.det >= DETECTADAS_EXTRA) || linhaFracaOk(c.anel, c.det)
   }
   let inicio = s0
   while (temBolinhas(inicio - 1)) inicio--
@@ -546,6 +555,12 @@ export function anguloDaGrade(detectados: Detectado[]): number {
 export const PISTA_MINIMA = 0.1
 const LADO_DISTANCIAS = [1.3, 1.7, 2.1]
 const LADO_PASSOS = Array.from({ length: 21 }, (_, i) => 0.25 + 0.025 * i)
+// Um caminho da pista só conta se passar só por papel: o fundo em cada ponto,
+// dividido pelo do meio da tabela, a partir de LADO_PAPEL. Nas fotos do grupo,
+// o papel ficou de 0,84 a 1,4 e a mesa de madeira, o piso e o pano em volta da
+// folha de 0,18 a 0,62: a textura deles imitava as linhas da coluna Questão do
+// lado da E, e a pista de uma foto em pé caía para perto de 0.
+const LADO_PAPEL = 0.75
 // A foto como está (sem girar 90° ou 180°) só perde para outra orientação se
 // a pista dela for maior por mais que esta margem.
 const MARGEM_EM_PE = 0.05
@@ -557,11 +572,22 @@ const MARGEM_EM_PE = 0.05
  * grade, mede o contraste (mais escuro menos mais claro) no meio do caminho
  * entre elas, a 1,3, 1,7 e 2,1 colunas antes da A e depois da E. Devolve o
  * contraste do lado da A menos o do lado da E: positivo com a folha na
- * orientação certa, negativo de cabeça para baixo. A borda do papel ou a mesa,
- * paralelas às colunas, não criam esse contraste.
+ * orientação certa, negativo de cabeça para baixo. A borda do papel, paralela
+ * às colunas, não cria esse contraste. Os caminhos que saem do papel não
+ * contam (LADO_PAPEL): a textura de uma mesa ou de um piso em volta da folha
+ * cria contraste.
  * escuro(px, py): escuridão (0 a 1) do pixel, ou null fora da imagem.
+ * fundo(px, py): cinza do papel em volta do pixel (a mediana larga da
+ * normalização da luz), dentro da imagem.
  */
-export function pistaDoLado(linhas: Circulo[][], escuro: (px: number, py: number) => number | null): number {
+export function pistaDoLado(
+  linhas: Circulo[][],
+  escuro: (px: number, py: number) => number | null,
+  fundo: (px: number, py: number) => number = () => 1,
+): number {
+  const todas = linhas.flat()
+  const papel =
+    LADO_PAPEL * fundo(Math.trunc(media(todas.map((c) => c.x))), Math.trunc(media(todas.map((c) => c.y))))
   const lado = (col: number, sinal: number): number | null => {
     const vals: number[] = []
     for (let i = 0; i + 1 < linhas.length; i++) {
@@ -576,8 +602,10 @@ export function pistaDoLado(linhas: Circulo[][], escuro: (px: number, py: number
         const oy = y0 + sinal * t * uy
         const perfil: number[] = []
         for (const s of LADO_PASSOS) {
-          const e = escuro(Math.trunc(ox + (x1 - x0) * s), Math.trunc(oy + (y1 - y0) * s))
-          if (e === null) break
+          const px = Math.trunc(ox + (x1 - x0) * s)
+          const py = Math.trunc(oy + (y1 - y0) * s)
+          const e = escuro(px, py)
+          if (e === null || fundo(px, py) < papel) break
           perfil.push(e)
         }
         if (perfil.length === LADO_PASSOS.length) vals.push(Math.max(...perfil) - Math.min(...perfil))
@@ -594,7 +622,8 @@ export function pistaDoLado(linhas: Circulo[][], escuro: (px: number, py: number
 /**
  * Grade da tabela nas 4 orientações (procurar) ou só na foto como está.
  * anel(x, y, forma): pontuação de anel da posição na imagem.
- * escuro(px, py): escuridão do pixel, para a pista do lado da folha.
+ * escuro(px, py) e fundo(px, py): escuridão do pixel e cinza do papel em
+ * volta, para a pista do lado da folha.
  * ladoIncerto: achou a tabela, mas não o lado da folha.
  */
 export function lerGrade(
@@ -603,6 +632,7 @@ export function lerGrade(
   anel: (x: number, y: number, forma: Forma) => number | null,
   escuro: (px: number, py: number) => number | null,
   procurar: boolean,
+  fundo: (px: number, py: number) => number = () => 1,
 ): { grade: Grade | null; ladoIncerto: boolean } {
   // A grade é montada com as posições giradas de -a; o anel e as posições
   // finais voltam para a imagem girando de +a.
@@ -623,7 +653,7 @@ export function lerGrade(
       linhas: g.linhas.map((linha) => linha.map(({ x, y, r }) => ({ x: x * cos - y * sin, y: x * sin + y * cos, r }))),
     }
     const valida = !!grade && !gradeSuspeita(grade)
-    const pista = grade && valida && procurar ? pistaDoLado(grade.linhas, escuro) : 0
+    const pista = grade && valida && procurar ? pistaDoLado(grade.linhas, escuro, fundo) : 0
     return { grade, valida, pista }
   }
 

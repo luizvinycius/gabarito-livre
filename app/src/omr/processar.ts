@@ -47,6 +47,14 @@ const ESCALAS = [1, 2]
 const PROPORCAO_RODA = [0.75, 1.33]
 const PROPORCAO_MAX = 1.6
 
+// Tinta da cor do vermelho mais escura que esta fração do papel em volta é
+// marcação do aluno e fica. Nas fotos do grupo, dentro das bolinhas pintadas:
+// caneta escura numa luz quente (marrom) de 0,24 a 0,35 e caneta rosa de 0,31
+// a 0,35, que antes sumiam (a bolinha pintada saía mais clara que as vazias e
+// uma dupla virava uma letra só, sem aviso); caneta vermelha de 0,42 a 0,47,
+// que continua apagada. Igual ao VERMELHO_ESCURO do protótipo.
+const VERMELHO_ESCURO = 0.38
+
 type Leitura = Extract<Resposta, { tipo: 'resultado' }>
 
 /**
@@ -133,15 +141,25 @@ function lerNaEscala(
     const pequena = nova(new cv.Mat())
     const kernel = nova(cv.Mat.ones(3, 3, cv.CV_8U))
 
-    // 2. tinta vermelha do professor vira branco
+    // 2. tinta vermelha do professor vira branco. Só o vermelho claro: a
+    // caneta escura numa luz quente (marrom) e a caneta rosa também caem na
+    // faixa de cor do vermelho, mas ficam bem mais escuras que o papel em
+    // volta (VERMELHO_ESCURO)
     const [baixo1, alto1, baixo2, alto2] = limitesDoVermelho(cv, largura, altura)
     cv.cvtColor(rgba, rgb, cv.COLOR_RGBA2RGB)
     cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV)
     cv.inRange(hsv, baixo1, alto1, verm1)
     cv.inRange(hsv, baixo2, alto2, verm2)
     cv.bitwise_or(verm1, verm2, verm1)
-    cv.dilate(verm1, verm1, kernel)
     cv.cvtColor(rgba, cinza, cv.COLOR_RGBA2GRAY)
+    fundoDoPapel(cv, cinza, pequena, fundo)
+    const vermelho: Uint8Array = verm1.data
+    const cinzaAntes: Uint8Array = cinza.data
+    const fundoAntes: Uint8Array = fundo.data
+    for (let i = 0; i < vermelho.length; i++) {
+      if (vermelho[i] && cinzaAntes[i] < VERMELHO_ESCURO * (fundoAntes[i] + 1)) vermelho[i] = 0
+    }
+    cv.dilate(verm1, verm1, kernel)
     cinza.setTo(new cv.Scalar(255), verm1)
     marcar('remover vermelho')
 
@@ -183,11 +201,8 @@ function lerNaEscala(
     }
     marcar('filtrar círculos')
 
-    // 11. normalizar a iluminação: a mediana larga (93 px) roda numa cópia a
-    // 1/4 do tamanho (23 px), que dá quase o mesmo fundo e é ~7x mais rápida
-    cv.resize(cinza, pequena, new cv.Size(Math.trunc(largura / 4), Math.trunc(altura / 4)), 0, 0, cv.INTER_AREA)
-    cv.medianBlur(pequena, pequena, 23)
-    cv.resize(pequena, fundo, new cv.Size(largura, altura), 0, 0, cv.INTER_LINEAR)
+    // 11. normalizar a iluminação
+    fundoDoPapel(cv, cinza, pequena, fundo)
     marcar('normalizar iluminação')
 
     // 5 a 10. estimar a grade (nas 4 orientações, se procurar)
@@ -198,6 +213,7 @@ function lerNaEscala(
       (x, y, forma) => notaAnel(imagem, x, y, forma),
       (px, py) => (px >= 0 && px < largura && py >= 0 && py < altura ? escuridao(imagem, px, py) : null),
       procurar,
+      (px, py) => imagem.fundo[py * largura + px] + 1,
     )
     const tabelaCortada = !!grade && gradeSuspeita(grade)
     marcar('estimar grade')
@@ -228,6 +244,17 @@ function lerNaEscala(
   } finally {
     for (const m of mats) m.delete()
   }
+}
+
+// Cinza do papel em volta de cada pixel (sem o +1 do light_background do
+// protótipo): a mediana larga (93 px) roda numa cópia a 1/4 do tamanho
+// (23 px), que dá quase o mesmo fundo e é ~7x mais rápida.
+function fundoDoPapel(cv: CV, cinza: CV, pequena: CV, fundo: CV) {
+  const largura = cinza.cols
+  const altura = cinza.rows
+  cv.resize(cinza, pequena, new cv.Size(Math.trunc(largura / 4), Math.trunc(altura / 4)), 0, 0, cv.INTER_AREA)
+  cv.medianBlur(pequena, pequena, 23)
+  cv.resize(pequena, fundo, new cv.Size(largura, altura), 0, 0, cv.INTER_LINEAR)
 }
 
 type Imagem = { cinza: Uint8Array; fundo: Uint8Array; largura: number; altura: number }

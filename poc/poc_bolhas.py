@@ -21,6 +21,11 @@ MIN_RING = 4.3
 # longe ou inclinadas, as linhas da tabela ficaram com anel de 3,5 a 4,3.
 MIN_RING_FRACO = 3.4
 MIN_DET_FRACO = 3
+# Tabela pequena na foto (lida com a imagem 2x maior): o anel borra e as
+# linhas da tabela ficaram com 2,7 a 3,4, mesmo com as 5 bolinhas detectadas
+# em todas. Com ao menos MIN_DET_FORTE detectadas, basta MIN_RING_DET.
+MIN_RING_DET = 2.5
+MIN_DET_FORTE = 4
 # A pontuação de anel não basta no modelo compacto (grade grossa): lá as
 # linhas de "DISSERTATIVA" e o cabeçalho tiram até 5,0. O que separa uma linha
 # de bolinhas de uma linha de texto é ter bolinhas detectadas: nas fotos e no
@@ -38,6 +43,13 @@ MIN_DET_EXTRA = 2
 # confirma; abaixo, é rasura leve e vale a primeira.
 DUPLA = 0.6
 DUPLA_DUVIDA = 0.4
+# Tinta da cor do vermelho mais escura que esta fração do papel em volta é
+# marcação do aluno e fica (student_ink_gray). Nas fotos do grupo, dentro das
+# bolinhas pintadas: caneta escura numa luz quente (marrom) de 0,24 a 0,35 e
+# caneta rosa de 0,31 a 0,35, que antes sumiam (a bolinha pintada saía mais
+# clara que as vazias e uma dupla virava uma letra só, sem aviso); caneta
+# vermelha de 0,42 a 0,47, que continua apagada.
+VERMELHO_ESCURO = 0.38
 
 # Foto inteira escolhida da galeria (procurar=True): a folha pode estar
 # deitada, de cabeça para baixo, girada ou pequena na foto. A leitura testa
@@ -53,16 +65,27 @@ ESCALAS = (1, 2)
 PISTA_MINIMA = 0.1
 LADO_DISTANCIAS = (1.3, 1.7, 2.1)
 LADO_PASSOS = tuple(0.25 + 0.025 * i for i in range(21))
+# Um caminho da pista só conta se passar só por papel: o fundo (a mediana
+# larga do normalize_light) em cada ponto, dividido pelo do meio da tabela, a
+# partir de LADO_PAPEL. Nas fotos do grupo, o papel ficou de 0,84 a 1,4 e a
+# mesa de madeira, o piso e o pano em volta da folha de 0,18 a 0,62: a
+# textura deles imitava as linhas da coluna Questão do lado da E, e a pista
+# de uma foto em pé caía para perto de 0.
+LADO_PAPEL = 0.75
 # A foto como está (sem girar 90° ou 180°) só perde para outra orientação se
 # a pista dela for maior por mais que esta margem.
 MARGEM_EM_PE = 0.05
 
 
 def student_ink_gray(img):
-    """Cinza onde a caneta vermelha do professor vira branco."""
+    """Cinza onde a caneta vermelha do professor vira branco. Só o vermelho
+    claro: a caneta escura numa luz quente (marrom) e a caneta rosa também
+    caem na faixa de cor do vermelho, mas ficam bem mais escuras que o papel
+    em volta (ver VERMELHO_ESCURO)."""
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     red = cv2.inRange(hsv, (0, 60, 40), (12, 255, 255)) | cv2.inRange(hsv, (155, 60, 40), (180, 255, 255))
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    red[gray < VERMELHO_ESCURO * light_background(gray)] = 0
     gray[cv2.dilate(red, np.ones((3, 3), np.uint8)) > 0] = 255
     return gray
 
@@ -424,7 +447,8 @@ def choose_block(cand, n_q):
         if ri not in cand:
             return False
         ring, det = cand[ri][1], cand[ri][2]
-        return (ring >= MIN_RING and det >= MIN_DET_EXTRA) or (ring >= MIN_RING_FRACO and det >= MIN_DET_FRACO)
+        return ((ring >= MIN_RING and det >= MIN_DET_EXTRA) or (ring >= MIN_RING_FRACO and det >= MIN_DET_FRACO)
+                or (ring >= MIN_RING_DET and det >= MIN_DET_FORTE))
     while bolinhas(s0 - 1):
         s0 -= 1
     extras = 0
@@ -457,7 +481,7 @@ def lattice_angle(circles):
     return float(np.arctan2(s4, c4) / 4) if s4 or c4 else 0.0
 
 
-def side_cue(norm, rows):
+def side_cue(norm, fundo, rows):
     """Pista do lado da folha: as linhas que separam as questões continuam
     pela coluna "Questão", que fica do lado da coluna A; do lado da E, depois
     da borda da tabela, não há linha nenhuma. Para cada vão entre duas linhas
@@ -465,8 +489,12 @@ def side_cue(norm, rows):
     caminho entre elas, a 1,3, 1,7 e 2,1 colunas antes da A e depois da E.
     Devolve o contraste do lado da A menos o do lado da E: positivo com a
     folha na orientação certa, negativo de cabeça para baixo. A borda do
-    papel ou a mesa, paralelas às colunas, não criam esse contraste."""
+    papel, paralela às colunas, não cria esse contraste. Os caminhos que saem
+    do papel (fundo: light_background) não contam (LADO_PAPEL): a textura de
+    uma mesa ou de um piso em volta da folha cria contraste."""
     h, w = norm.shape
+    ys, xs = zip(*[(c[1], c[0]) for row in rows for c in row])
+    papel = LADO_PAPEL * fundo[int(np.mean(ys)), int(np.mean(xs))]
 
     def lado(col, sinal):
         vals = []
@@ -478,7 +506,7 @@ def side_cue(norm, rows):
                 perfil = []
                 for s in LADO_PASSOS:
                     px, py = int(ox + (x1 - x0) * s), int(oy + (y1 - y0) * s)
-                    if not (0 <= px < w and 0 <= py < h):
+                    if not (0 <= px < w and 0 <= py < h) or fundo[py, px] < papel:
                         break
                     perfil.append((255 - float(norm[py, px])) / 255)
                 else:
@@ -492,10 +520,11 @@ def side_cue(norm, rows):
     return (a or 0.0) - (e or 0.0)
 
 
-def read_grade(circles, n_q, norm, procurar):
+def read_grade(circles, n_q, norm, procurar, fundo=None):
     """Grade da tabela nas 4 orientações (procurar=True) ou só na foto como
     está. Devolve (rows, rings, dets, extras, rmed, cols, incerta), com as
-    posições na imagem; incerta: achou a tabela, mas não o lado da folha."""
+    posições na imagem; incerta: achou a tabela, mas não o lado da folha.
+    fundo: o light_background da imagem (para a pista do lado)."""
     def na_orientacao(a):
         # a grade é montada com as posições giradas de -a; o anel e as
         # posições finais voltam para a imagem girando de +a
@@ -509,7 +538,7 @@ def read_grade(circles, n_q, norm, procurar):
         rows, rings, dets, extras, rmed, cols = group_rows(girados, n_q, anel)
         rows = [[(x * cos - y * sin, x * sin + y * cos, r) for x, y, r in row] for row in rows]
         valida = bool(rows) and not suspeita(rings, dets, cols)
-        pista = side_cue(norm, rows) if valida and procurar else 0.0
+        pista = side_cue(norm, fundo, rows) if valida and procurar else 0.0
         return (rows, rings, dets, extras, rmed, cols), valida, pista
 
     if not procurar:
@@ -533,24 +562,31 @@ def suspeita(rings, dets, cols):
     anel a partir de MIN_RING_FRACO se tiver ao menos MIN_DET_FRACO bolinhas
     detectadas, se cada coluna do bloco tiver bolinhas detectadas em ao menos
     metade das linhas e se as colunas logo antes da A e logo depois da E
-    tiverem bolinhas redondas em menos da metade (cols, do group_rows). Com a
+    tiverem bolinhas redondas em menos da metade (cols, do group_rows); com
+    MIN_DET_FORTE detectadas, a partir de MIN_RING_DET. Com a
     grade uma coluna para o lado, a coluna que caiu fora da tabela fica sem
     bolinhas, e a coluna da tabela que ficou de fora do bloco tem as dela."""
     n = len(rings)
     colunas_ok = bool(cols) and min(cols[:5]) * 2 >= n and max(cols[5:]) * 2 < n
-    baixo = any(v < MIN_RING and not (colunas_ok and v >= MIN_RING_FRACO and d >= MIN_DET_FRACO)
-                for v, d in zip(rings, dets))
+    fraca_ok = lambda v, d: (v >= MIN_RING_FRACO and d >= MIN_DET_FRACO) or (v >= MIN_RING_DET and d >= MIN_DET_FORTE)
+    baixo = any(v < MIN_RING and not (colunas_ok and fraca_ok(v, d)) for v, d in zip(rings, dets))
     return baixo or (bool(dets) and 0 in (dets[0], dets[-1]))
 
 
-def normalize_light(gray):
-    """Remove sombra/iluminação desigual: escuro relativo ao papel em volta.
-    A mediana larga (93 px) roda numa cópia a 1/4 do tamanho (23 px), que dá
-    quase o mesmo fundo e é ~7x mais rápida."""
+def light_background(gray):
+    """Cinza do papel em volta de cada pixel (+1). A mediana larga (93 px)
+    roda numa cópia a 1/4 do tamanho (23 px), que dá quase o mesmo fundo e é
+    ~7x mais rápida."""
     h, w = gray.shape
     small = cv2.resize(gray, (w // 4, h // 4), interpolation=cv2.INTER_AREA)
-    bg = cv2.resize(cv2.medianBlur(small, 23), (w, h), interpolation=cv2.INTER_LINEAR).astype(float) + 1
-    return np.clip(gray / bg * 255, 0, 255).astype(np.uint8)
+    return cv2.resize(cv2.medianBlur(small, 23), (w, h), interpolation=cv2.INTER_LINEAR).astype(float) + 1
+
+
+def normalize_light(gray, fundo=None):
+    """Remove sombra/iluminação desigual: escuro relativo ao papel em volta.
+    fundo: o light_background(gray), se já calculado."""
+    fundo = light_background(gray) if fundo is None else fundo
+    return np.clip(gray / fundo * 255, 0, 255).astype(np.uint8)
 
 
 def fill_ratio(gray, x, y, r):
@@ -595,8 +631,9 @@ def read_scaled(img, n_q, target_w, procurar):
     s = target_w / img.shape[1]
     img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
     gray = student_ink_gray(img)
-    norm = normalize_light(gray)
-    rows, rings, dets, extras, rmed, cols, incerta = read_grade(find_circles(gray), n_q, norm, procurar)
+    fundo = light_background(gray)
+    norm = normalize_light(gray, fundo)
+    rows, rings, dets, extras, rmed, cols, incerta = read_grade(find_circles(gray), n_q, norm, procurar, fundo)
     # tabela cortada (ou grade deslocada), com linhas a mais ou com o lado da
     # folha incerto: o app avisa e aqui todas as respostas viram "?"
     cortada = suspeita(rings, dets, cols)
