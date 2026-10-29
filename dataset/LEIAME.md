@@ -2,7 +2,7 @@
 
 Fotos de folhas **preenchidas pelo próprio grupo**, impressas a partir do modelo (`folha-de-respostas-teste.pdf`, gerado por `poc/gerar_folha.py`; tem o campo "Código" para o `LV-01`). Nunca use provas reais de alunos: este repositório é público (seção 5 da documentação). A única exceção é `univag-compacto-01.jpg`, prova do próprio coordenador, publicada com autorização e com o nome riscado.
 
-Há dois jeitos de contribuir. O mais simples é mandar as fotos para o coordenador; quem tiver o app aberto no celular pode salvar o recorte.
+Há três jeitos de contribuir. O mais simples é mandar as fotos para o coordenador; quem tiver o app aberto no celular pode salvar o recorte ou, com um token, enviar a captura direto para o repositório privado de capturas (Jeito 3).
 
 ## Jeito 1: mandar as fotos para o coordenador (WhatsApp)
 1. Imprima o modelo e escreva, **fora da tabela**, suas iniciais e um número: `LV-01`, `LV-02`… Não escreva o nome completo.
@@ -31,6 +31,14 @@ O coordenador então:
    ```csv
    recorte-8q-20261018-215723.jpg,8,A_BCD*CC,iPhone 11,lapis; sombra; em branco; dupla
    ```
+
+## Jeito 3: enviar a captura direto (página de teste)
+Para analisar uma captura que deu trabalho: além da imagem, vão a leitura e o log do quadro ao vivo (por que não capturou sozinho).
+1. Peça ao coordenador acesso ao repositório **privado** `gabarito-livre-capturas` e crie um token em GitHub → Settings → Developer settings → **Fine-grained tokens**: acesso só a esse repositório, permissão **Contents: Read and write**.
+2. No app, abra a página de teste (link no rodapé ou `#teste`), abra **☁️ Envio de capturas**, cole o token, escreva um **apelido para o aparelho** (ex.: `iphone-11-luiz`; vai no nome da pasta, porque o navegador não diz o modelo do celular) e toque em **Testar a conexão**. O token fica só naquele celular; o mesmo token pode ser usado em vários.
+3. Capture a folha (pela câmera, como no app, ou escolhendo a foto da galeria), escreva as **respostas reais** da folha (opcional, mas é o que permite usar a captura como teste) e uma observação, e toque em **☁️ Enviar ao repositório de capturas**.
+
+O repositório de capturas é privado porque pode ter prova real. Uma captura só vem para este `dataset/` (público) depois de conferir que é folha de teste do grupo, sem nome de aluno.
 
 ## O CSV
 - `respostas`: o que está **marcado na folha**, não o que o app leu. `_` = em branco, `*` = duas marcadas. (`?` = o app tem de pedir confirmação; só o conjunto sintético usa.)

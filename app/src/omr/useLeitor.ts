@@ -6,9 +6,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Mensagem, Resposta } from './protocolo'
 import { type Foto, pixelsParaLeitura, procurarNaFoto } from './imagem'
 
-export type Leitura = Extract<Resposta, { tipo: 'resultado' }>
+type Resultado = Extract<Resposta, { tipo: 'resultado' }>
 
-type Pendente = { resolver: (r: Leitura) => void; rejeitar: (e: Error) => void }
+// preparo: tempo (ms) para preparar os pixels na tela, antes do worker
+export type Leitura = Resultado & { preparo: number }
+
+type Pendente = { resolver: (r: Resultado) => void; rejeitar: (e: Error) => void }
 
 export function useLeitor() {
   const worker = useRef<Worker | null>(null)
@@ -16,14 +19,19 @@ export function useLeitor() {
   const pendentes = useRef<Pendente[]>([])
   const [pronto, setPronto] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  // versão do OpenCV e quanto tempo levou para carregar (página de teste)
+  const [carga, setCarga] = useState<{ versao: string; ms: number } | null>(null)
 
   useEffect(() => {
+    const inicio = performance.now()
     const w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
     worker.current = w
     w.onmessage = (e: MessageEvent<Resposta>) => {
       const r = e.data
-      if (r.tipo === 'pronto') setPronto(true)
-      else if (r.tipo === 'erro') {
+      if (r.tipo === 'pronto') {
+        setPronto(true)
+        setCarga({ versao: r.versao, ms: performance.now() - inicio })
+      } else if (r.tipo === 'erro') {
         const p = pendentes.current.shift()
         if (p) p.rejeitar(new Error(r.mensagem))
         else setErro(r.mensagem)
@@ -44,8 +52,10 @@ export function useLeitor() {
     return new Promise<Leitura>((resolver, rejeitar) => {
       const w = worker.current
       if (!w) return rejeitar(new Error('O leitor ainda não carregou'))
-      pendentes.current.push({ resolver, rejeitar })
+      const t0 = performance.now()
       const dados = pixelsParaLeitura(foto)
+      const preparo = performance.now() - t0
+      pendentes.current.push({ resolver: (r) => resolver({ ...r, preparo }), rejeitar })
       const pixels = dados.data.buffer
       w.postMessage(
         {
@@ -62,5 +72,5 @@ export function useLeitor() {
     })
   }, [])
 
-  return { pronto, erro, ler }
+  return { pronto, erro, carga, ler }
 }
