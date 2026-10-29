@@ -2,8 +2,8 @@
 
 Desenha as tabelas da folha de teste (gerar_folha.py), pinta as bolinhas
 imitando caneta, lápis, rabisco e borracha e aplica o que acontece numa foto
-de verdade: sombra, luz amarela, folha torta, perspectiva, desfoque, ruído,
-JPEG forte e a correção em vermelho do professor. Também simula o recorte do
+de verdade: sombra, luz amarela, folha torta, perspectiva, folha curvada,
+desfoque, ruído, JPEG forte e a correção em vermelho do professor. Também simula o recorte do
 quadro-guia da câmera com a tabela deslocada ou cortada, e tabelas com
 linhas a mais ou a menos que o gabarito. Os recortes do quadro-guia também
 são feitos a partir da foto real do modelo compacto (dataset/fotos/).
@@ -67,6 +67,11 @@ VARIACOES = [
                            condicoes=["caneta preta", "jpeg", "vermelho"])),
     ("perto", dict(marca="caneta azul", tipo="perto", giro=-2, condicoes=["caneta azul", "perto"])),
     ("longe", dict(marca="caneta preta", tipo="longe", luz="sombra", condicoes=["caneta preta", "longe", "sombra"])),
+    # folha curvada (fotos r-02, r-07 e r-11 do grupo): no fim da lista para
+    # não mudar as sementes das variações de cima
+    ("curvada", dict(marca="caneta azul", curva="arco", tipo="perto", giro=3,
+                     condicoes=["caneta azul", "curvada", "perto"])),
+    ("borda-enrolada", dict(marca="lapis", curva="borda", condicoes=["lapis", "curvada"])),
 ]
 
 # Deslocamento da tabela no quadro, em linhas (positivo: tabela mais baixa).
@@ -233,6 +238,28 @@ def iluminar(img, rng, luz, tabela):
     return np.clip(f, 0, 255).astype(np.uint8)
 
 
+def curvar(img, tabela, linha, curva):
+    """Folha curvada: desloca a imagem na vertical conforme a posição na
+    largura da tabela (u, de -0,5 a 0,5), em frações da altura de uma linha.
+    'arco': o meio da tabela sobe até ~0,6 linha em relação às pontas, mais
+    embaixo que em cima (foto r-02 do grupo). 'borda': a borda direita do
+    papel enrola e desce; a coluna E fica ~0,4 linha abaixo da D (r-07)."""
+    x0, y0, x1, y1 = tabela
+    h, w = img.shape[:2]
+    xs, ys = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+    u = (xs - (x0 + x1) / 2) / (x1 - x0)
+    v = np.clip((ys - y0) / (y1 - y0), 0, 1)
+    if curva == "arco":
+        dy = -0.6 * linha * (1 - (2 * u) ** 2) * (0.5 + 0.7 * v)
+        dx = np.zeros_like(dy)
+    else:
+        k = np.clip((u - 0.15) / 0.35, 0, None) ** 2
+        dy = 0.9 * linha * k
+        dx = -0.25 * linha * k
+    # a imagem de saída em (x, y) vem do ponto (x - dx, y - dy) da folha plana
+    return cv2.remap(img, xs - dx, ys - dy, cv2.INTER_LINEAR, borderValue=(245, 245, 245))
+
+
 def transformar(img, tabela, giro=0.0, perspectiva=0.0):
     """Gira e/ou aplica perspectiva em volta do centro da tabela. Devolve a
     imagem e os 4 cantos da tabela transformados."""
@@ -321,6 +348,8 @@ def gerar(pasta):
             if op.get("vermelho"):
                 correcao_vermelha(img, rng, bolinhas)
             img = iluminar(img, rng, op.get("luz"), tabela)
+            if op.get("curva"):
+                img = curvar(img, tabela, linha, op["curva"])
             img, cantos = transformar(img, tabela, op.get("giro", 0), op.get("perspectiva", 0))
             tipo = op.get("tipo", "recorte")
             if tipo == "recorte":

@@ -37,6 +37,24 @@ MIN_DET_FORTE = 4
 # Linha vizinha ao bloco com anel alto e MIN_DET_EXTRA detectadas: a tabela
 # tem mais linhas que o gabarito.
 MIN_DET_EXTRA = 2
+# Folha curvada (column_correction): bolinhas de uma coluna para estimar o
+# deslocamento dela e passadas do ajuste alternado (fit_grid).
+CURVA_MIN_OBS = 3
+CURVA_PASSADAS = 3
+# Deslocamento máximo de uma coluna ao longo dela, em passos de linha. No
+# conjunto sintético (arco e borda enrolada), a curvatura deu até 0,18; numa
+# folha plana, até 0,03; uma coluna com as linhas trocadas, de 0,4 a 0,65.
+CURVA_MAX = 0.3
+# Ligação de uma cadeia que pula uma coluna (horizontal_chains): não vale se
+# houver uma bolinha detectada no vão a menos de PULO_VAO da distância típica
+# entre vizinhas da reta que liga as duas pontas.
+PULO_VAO = 0.5
+# Resgate de uma coluna inteira deslocada (rescue_column): raio de busca
+# (fração do passo de uma linha), quanto cada bolinha pode se afastar do
+# deslocamento mediano (em raios) e quantas bolinhas no mínimo.
+RESGATE_RAIO = 0.45
+RESGATE_COERENCIA = 0.5
+RESGATE_MIN = 3
 # Decisão de cada linha: a segunda bolinha mais escura destaca-se da base mais
 # que DUPLA do destaque da primeira: duas marcadas. Entre DUPLA_DUVIDA e DUPLA
 # (uma segunda marcação mais fraca, ex.: GS-02 Q6, 50%), é dúvida e o professor
@@ -284,6 +302,21 @@ def horizontal_chains(circles, rmed):
             i = parent[i]
         return i
 
+    # distância típica até a vizinha mais próxima (o passo de uma linha, em
+    # geral): mede quão perto da ligação uma bolinha do vão está
+    vizinha = np.median([min(np.hypot(c[0] - o[0], c[1] - o[1]) for o in circles if o is not c)
+                         for c in circles]) if n > 1 else 0.0
+
+    def atravessa(xi, yi, xj, yj):
+        """A ligação pula uma bolinha detectada que está quase na reta entre
+        as duas pontas: a linha continua por ela, e a ponta j é da linha de
+        baixo ou de cima (folha curvada, r-07)."""
+        for xk, yk, _ in circles:
+            if xi + 0.25 * (xj - xi) < xk < xj - 0.25 * (xj - xi):
+                if abs(yk - (yi + (yj - yi) * (xk - xi) / (xj - xi))) < PULO_VAO * vizinha:
+                    return True
+        return False
+
     gaps = []
     for i in range(n):
         xi, yi, _ = circles[i]
@@ -291,7 +324,7 @@ def horizontal_chains(circles, rmed):
         for j in range(n):
             xj, yj, _ = circles[j]
             dx, dy = xj - xi, abs(yj - yi)
-            if 2 * rmed < dx < 12 * rmed and dy < 0.9 * rmed and dx < bd:
+            if 2 * rmed < dx < 12 * rmed and dy < 0.9 * rmed and dx < bd and not atravessa(xi, yi, xj, yj):
                 best, bd = j, dx
         if best is not None:
             parent[find(i)] = find(best)
@@ -344,9 +377,89 @@ def chain_observations(chains, centers, sp, rmed):
 
 
 def fit_grid(obs, rmed, n_q):
-    """Grade (coluna, linha) -> (x, y): projetiva quando dá, afim quando não."""
+    """Grade (coluna, linha) -> (x, y): projetiva quando dá, afim quando não,
+    mais a correção de cada coluna (column_correction) para a folha curvada."""
     lo, hi = obs[:, 0].min() - n_q, obs[:, 0].max() + n_q
-    return fit_projective(obs, rmed, lo, hi) or fit_affine(obs)
+    base = fit_projective(obs, rmed, lo, hi) or fit_affine(obs)
+    if base is None:
+        return None
+    corr = column_correction(obs, base)
+    # A base ajustada com as bolinhas da folha curvada se entorta para
+    # acompanhá-las e, fora das linhas observadas, escorrega (na r-07, a
+    # questão 1 da coluna A caía uma linha acima). Ajustada de novo sem a
+    # correção das colunas, ela fica plana e a curvatura fica nas colunas.
+    for _ in range(CURVA_PASSADAS):
+        plana = obs.copy()
+        for k, (r, c, _, _) in enumerate(obs):
+            plana[k, 2:] -= corr(c, r)
+        nova = fit_projective(plana, rmed, lo, hi) or fit_affine(plana)
+        if nova is None:
+            break
+        base = nova
+        corr = column_correction(obs, base)
+
+    def prever(ci, ri):
+        x, y = base(ci, ri)
+        dx, dy = corr(ci, ri)
+        return x + dx, y + dy
+    return prever
+
+
+def column_correction(obs, base):
+    """Folha curvada: a homografia supõe papel plano. Numa folha arqueada, o
+    meio de cada linha sobe em relação às pontas (r-02); com a borda do
+    papel enrolada, a coluna E inteira desce meia linha (r-07). Cada coluna
+    com ao menos CURVA_MIN_OBS bolinhas ganha um deslocamento linear ao longo
+    dela (pelos resíduos da grade base, por mínimos quadrados), constante
+    fora das linhas observadas; a coluna sem bolinhas bastantes usa o da
+    coluna mais próxima que tem (empate: a da esquerda). Entre duas colunas
+    (forma das bolinhas), interpolado; antes da A e depois da E, o da A e o
+    da E. Devolve corr(ci, ri) -> (dx, dy).
+    Um deslocamento ao longo da coluna maior que CURVA_MAX do passo de uma
+    linha não é curvatura: é a coluna com as linhas trocadas (na r-07, uma
+    cadeia ligou o A da questão 1 ao C e ao D da 2), e a coluna fica sem
+    correção, para o ajuste robusto descartar essas bolinhas."""
+    pontos = {}
+    for r, c, x, y in obs:
+        px, py = base(c, r)
+        pontos.setdefault(int(c), []).append((r, x - px, y - py))
+    ajuste = {}
+    for c, pts in pontos.items():
+        if len(pts) < CURVA_MIN_OBS:
+            continue
+        rs = np.array([p[0] for p in pts])
+        rm = rs.mean()
+        var = ((rs - rm) ** 2).mean()
+        coef = []
+        for d in (np.array([p[1] for p in pts]), np.array([p[2] for p in pts])):
+            dm = d.mean()
+            inc = ((rs - rm) * (d - dm)).mean() / var if var > 0 else 0.0
+            coef.append((dm - inc * rm, inc))
+        # deslocamento ao longo da coluna (na direção do passo de uma linha),
+        # nas pontas das linhas observadas
+        (ax, bx), (ay, by) = coef
+        (x0, y0), (x1, y1) = base(c, rm), base(c, rm + 1)
+        ux, uy = x1 - x0, y1 - y0
+        passo2 = ux * ux + uy * uy
+        if max(abs((ax + bx * r) * ux + (ay + by * r) * uy) for r in (rs.min(), rs.max())) > CURVA_MAX * passo2:
+            continue
+        ajuste[c] = (coef, rs.min(), rs.max())
+    if not ajuste:
+        return lambda ci, ri: (0.0, 0.0)
+    por_coluna = [ajuste[min(ajuste, key=lambda k: (abs(k - c), k))] for c in range(5)]
+
+    def na_coluna(c, ri):
+        (ax, bx), (ay, by) = por_coluna[c][0]
+        r = min(max(ri, por_coluna[c][1]), por_coluna[c][2])
+        return ax + bx * r, ay + by * r
+
+    def corr(ci, ri):
+        ci = min(max(ci, 0.0), 4.0)
+        c0 = min(int(np.floor(ci)), 3)
+        t = ci - c0
+        (x0, y0), (x1, y1) = na_coluna(c0, ri), na_coluna(c0 + 1, ri)
+        return x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+    return corr
 
 
 def robust_fit(obs, rmed, n_q):
@@ -381,17 +494,66 @@ def grow_grid(obs, prever, todos, rmed, n_q):
         ok = d[j] < 0.5 * rmed and 0.6 * rmed < todos[j, 2] < 1.6 * rmed
         return (ri, ci, todos[j, 0], todos[j, 1]) if ok else None
 
-    for _ in range(n_q):
-        lo, hi = int(obs[:, 0].min()) - 1, int(obs[:, 0].max()) + 1
-        novos = [c for c in (casar(prever, ri, ci) for ri in range(lo, hi + 1) for ci in range(5)) if c]
-        if len(novos) <= len(obs):
-            break
-        o = np.array(novos, float)
+    def crescer(obs, prever):
+        for _ in range(n_q):
+            lo, hi = int(obs[:, 0].min()) - 1, int(obs[:, 0].max()) + 1
+            novos = [c for c in (casar(prever, ri, ci) for ri in range(lo, hi + 1) for ci in range(5)) if c]
+            if len(novos) <= len(obs):
+                break
+            o = np.array(novos, float)
+            p = fit_grid(o, rmed, n_q)
+            if p is None:
+                break
+            obs, prever = o, p
+        return obs, prever
+
+    obs, prever = crescer(obs, prever)
+    if {int(c) for c in obs[:, 1]} == {0, 1, 2, 3}:
+        # só 4 colunas nas cadeias, numeradas de 0 a 3: a que falta é a A
+        # (folha arqueada, r-07: o A não fica na altura do B de nenhuma
+        # linha) ou a E. Fica o lado com mais bolinhas resgatadas.
+        esq, dir_ = rescue_column(obs, prever, todos, rmed, -1), rescue_column(obs, prever, todos, rmed, 4)
+        if len(esq) > len(dir_):
+            o = obs.copy()
+            o[:, 1] += 1
+            o = np.vstack([o, np.array([(r, 0, x, y) for r, _, x, y in esq], float)])
+            p = fit_grid(o, rmed, n_q)
+            if p is not None:
+                obs, prever = crescer(o, p)
+    resgatadas = [o for ci in range(5) for o in rescue_column(obs, prever, todos, rmed, ci)]
+    if resgatadas:
+        o = np.vstack([obs, np.array(resgatadas, float)])
         p = fit_grid(o, rmed, n_q)
-        if p is None:
-            break
-        obs, prever = o, p
+        if p is not None:
+            obs, prever = crescer(o, p)
     return obs, prever
+
+
+def rescue_column(obs, prever, todos, rmed, ci):
+    """Coluna inteira deslocada (borda do papel enrolada, r-07): as bolinhas
+    dela caem a mais de 0,5 raio da posição prevista e nenhuma entra na
+    grade. Nas linhas observadas em que a coluna ci não tem bolinha, procura
+    o círculo mais perto a menos de RESGATE_RAIO do passo de uma linha; os
+    que se deslocaram como a mediana deles (até RESGATE_COERENCIA raio)
+    entram, se forem ao menos RESGATE_MIN. Devolve as observações novas
+    (linha, coluna, x, y)."""
+    lo, hi = int(obs[:, 0].min()), int(obs[:, 0].max())
+    tem = {int(r) for r, c, _, _ in obs if int(c) == ci}
+    cand = []
+    for ri in range(lo, hi + 1):
+        if ri in tem:
+            continue
+        x, y = prever(ci, ri)
+        x1, y1 = prever(ci, ri + 1)
+        d = np.hypot(todos[:, 0] - x, todos[:, 1] - y)
+        j = int(np.argmin(d))
+        if d[j] < RESGATE_RAIO * np.hypot(x1 - x, y1 - y) and 0.6 * rmed < todos[j, 2] < 1.6 * rmed:
+            cand.append((ri, ci, todos[j, 0], todos[j, 1], todos[j, 0] - x, todos[j, 1] - y))
+    if len(cand) < RESGATE_MIN:
+        return []
+    mx, my = np.median([c[4] for c in cand]), np.median([c[5] for c in cand])
+    bons = [c[:4] for c in cand if np.hypot(c[4] - mx, c[5] - my) < RESGATE_COERENCIA * rmed]
+    return bons if len(bons) >= RESGATE_MIN else []
 
 
 def grid_shape(obs, prever, rmed):
@@ -499,7 +661,12 @@ def side_cue(norm, fundo, rows):
     def lado(col, sinal):
         vals = []
         for a, b in zip(rows, rows[1:]):
-            ux, uy = (a[4][0] - a[0][0]) / 4, (a[4][1] - a[0][1]) / 4
+            # passo de uma coluna na ponta (A->B ou D->E), e não a média da
+            # linha: numa folha arqueada, a linha desce perto da A e da E, e
+            # a média mandava o caminho para longe da linha da questão
+            # (r-07: pista 0,02 em pé)
+            (xa, ya, _), (xb, yb, _) = (a[0], a[1]) if col == 0 else (a[3], a[4])
+            ux, uy = xb - xa, yb - ya
             (x0, y0, _), (x1, y1, _) = a[col], b[col]
             for t in LADO_DISTANCIAS:
                 ox, oy = x0 + sinal * t * ux, y0 + sinal * t * uy

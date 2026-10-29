@@ -182,6 +182,25 @@ const linhaFracaOk = (anel: number, det: number) =>
 // DETECTADAS_EXTRA bolinhas: a tabela tem mais linhas que o gabarito.
 export const DETECTADAS_EXTRA = 2
 
+// Folha curvada (correcaoDasColunas): bolinhas de uma coluna para estimar o
+// deslocamento dela e passadas do ajuste alternado (ajustarGrade).
+const CURVA_MIN_OBS = 3
+const CURVA_PASSADAS = 3
+// Deslocamento máximo de uma coluna ao longo dela, em passos de linha. No
+// conjunto sintético (arco e borda enrolada), a curvatura deu até 0,18; numa
+// folha plana, até 0,03; uma coluna com as linhas trocadas, de 0,4 a 0,65.
+export const CURVA_MAX = 0.3
+// Ligação de uma cadeia que pula uma coluna (cadeiasHorizontais): não vale se
+// houver uma bolinha detectada no vão a menos de PULO_VAO da distância típica
+// entre vizinhas da reta que liga as duas pontas.
+const PULO_VAO = 0.5
+// Resgate de uma coluna inteira deslocada (resgatarColuna): raio de busca
+// (fração do passo de uma linha), quanto cada bolinha pode se afastar do
+// deslocamento mediano (em raios) e quantas bolinhas no mínimo.
+const RESGATE_RAIO = 0.45
+const RESGATE_COERENCIA = 0.5
+const RESGATE_MIN = 3
+
 // Decisão de cada linha: a segunda bolinha mais escura destaca-se da base mais
 // que DUPLA do destaque da primeira: duas marcadas. Entre DUPLA_DUVIDA e DUPLA
 // (uma segunda marcação mais fraca), é dúvida e o professor confirma; abaixo,
@@ -288,6 +307,26 @@ function cadeiasHorizontais(circulos: Circulo[], rmed: number): { cadeias: Circu
     }
     return i
   }
+  // distância típica até a vizinha mais próxima (o passo de uma linha, em
+  // geral): mede quão perto da ligação uma bolinha do vão está
+  const vizinha =
+    n > 1
+      ? mediana(
+          circulos.map((c, i) =>
+            Math.min(...circulos.filter((_, k) => k !== i).map((o) => Math.hypot(c.x - o.x, c.y - o.y))),
+          ),
+        )
+      : 0
+  // A ligação pula uma bolinha detectada que está quase na reta entre as
+  // duas pontas: a linha continua por ela, e a ponta j é da linha de baixo
+  // ou de cima (folha curvada, r-07).
+  const atravessa = (a: Circulo, b: Circulo) =>
+    circulos.some(
+      (k) =>
+        k.x > a.x + 0.25 * (b.x - a.x) &&
+        k.x < b.x - 0.25 * (b.x - a.x) &&
+        Math.abs(k.y - (a.y + ((b.y - a.y) * (k.x - a.x)) / (b.x - a.x))) < PULO_VAO * vizinha,
+    )
   const vaos: number[] = []
   for (let i = 0; i < n; i++) {
     let melhor = -1
@@ -295,7 +334,7 @@ function cadeiasHorizontais(circulos: Circulo[], rmed: number): { cadeias: Circu
     for (let j = 0; j < n; j++) {
       const dx = circulos[j].x - circulos[i].x
       const dy = Math.abs(circulos[j].y - circulos[i].y)
-      if (dx > 2 * rmed && dx < 12 * rmed && dy < 0.9 * rmed && dx < bd) {
+      if (dx > 2 * rmed && dx < 12 * rmed && dy < 0.9 * rmed && dx < bd && !atravessa(circulos[i], circulos[j])) {
         melhor = j
         bd = dx
       }
@@ -361,10 +400,109 @@ function observacoesDasCadeias(cadeias: Circulo[][], centros: number[], sp: numb
   return obs
 }
 
-// Grade (coluna, linha) → (x, y): projetiva quando dá, afim quando não.
+// Grade (coluna, linha) → (x, y): projetiva quando dá, afim quando não, mais
+// a correção de cada coluna (correcaoDasColunas) para a folha curvada.
 function ajustarGrade(obs: Obs[], rmed: number, nQuestoes: number): Prever | null {
   const ls = obs.map((p) => p.linha)
-  return ajusteProjetivo(obs, rmed, Math.min(...ls) - nQuestoes, Math.max(...ls) + nQuestoes) ?? ajusteAfim(obs)
+  const lo = Math.min(...ls) - nQuestoes
+  const hi = Math.max(...ls) + nQuestoes
+  const plano = (o: Obs[]) => ajusteProjetivo(o, rmed, lo, hi) ?? ajusteAfim(o)
+  let base = plano(obs)
+  if (!base) return null
+  let corr = correcaoDasColunas(obs, base)
+  // A base ajustada com as bolinhas da folha curvada se entorta para
+  // acompanhá-las e, fora das linhas observadas, escorrega (na r-07, a questão
+  // 1 da coluna A caía uma linha acima). Ajustada de novo sem a correção das
+  // colunas, ela fica plana e a curvatura fica nas colunas.
+  for (let it = 0; it < CURVA_PASSADAS; it++) {
+    const c = corr
+    const nova = plano(
+      obs.map((o) => {
+        const [dx, dy] = c(o.coluna, o.linha)
+        return { ...o, x: o.x - dx, y: o.y - dy }
+      }),
+    )
+    if (!nova) break
+    base = nova
+    corr = correcaoDasColunas(obs, base)
+  }
+  const b = base
+  const k = corr
+  return (c, l) => {
+    const [x, y] = b(c, l)
+    const [dx, dy] = k(c, l)
+    return [x + dx, y + dy]
+  }
+}
+
+/**
+ * Folha curvada: a homografia supõe papel plano. Numa folha arqueada, o meio
+ * de cada linha sobe em relação às pontas (r-02); com a borda do papel
+ * enrolada, a coluna E inteira desce meia linha (r-07). Cada coluna com ao
+ * menos CURVA_MIN_OBS bolinhas ganha um deslocamento linear ao longo dela
+ * (pelos resíduos da grade base, por mínimos quadrados), constante fora das
+ * linhas observadas; a coluna sem bolinhas bastantes usa o da coluna mais
+ * próxima que tem (empate: a da esquerda). Entre duas colunas (forma das
+ * bolinhas), interpolado; antes da A e depois da E, o da A e o da E.
+ * Um deslocamento ao longo da coluna maior que CURVA_MAX do passo de uma linha
+ * não é curvatura: é a coluna com as linhas trocadas (na r-07, uma cadeia
+ * ligou o A da questão 1 ao C e ao D da 2), e a coluna fica sem correção, para
+ * o ajuste robusto descartar essas bolinhas. Igual ao column_correction do
+ * protótipo.
+ */
+function correcaoDasColunas(obs: Obs[], base: Prever): Prever {
+  const pontos = new Map<number, { l: number; dx: number; dy: number }[]>()
+  for (const o of obs) {
+    const [px, py] = base(o.coluna, o.linha)
+    pontos.set(o.coluna, [...(pontos.get(o.coluna) ?? []), { l: o.linha, dx: o.x - px, dy: o.y - py }])
+  }
+  type Ajuste = { ax: number; bx: number; ay: number; by: number; lMin: number; lMax: number }
+  const ajuste = new Map<number, Ajuste>()
+  for (const [c, pts] of pontos) {
+    if (pts.length < CURVA_MIN_OBS) continue
+    const ls = pts.map((p) => p.l)
+    const lm = media(ls)
+    const vari = media(ls.map((l) => (l - lm) ** 2))
+    const reta = (d: number[]) => {
+      const dm = media(d)
+      const inc = vari > 0 ? media(ls.map((l, i) => (l - lm) * (d[i] - dm))) / vari : 0
+      return [dm - inc * lm, inc]
+    }
+    const [ax, bx] = reta(pts.map((p) => p.dx))
+    const [ay, by] = reta(pts.map((p) => p.dy))
+    // deslocamento ao longo da coluna (na direção do passo de uma linha), nas
+    // pontas das linhas observadas
+    const lMin = Math.min(...ls)
+    const lMax = Math.max(...ls)
+    const [x0, y0] = base(c, lm)
+    const [x1, y1] = base(c, lm + 1)
+    const ux = x1 - x0
+    const uy = y1 - y0
+    const aoLongo = Math.max(...[lMin, lMax].map((l) => Math.abs((ax + bx * l) * ux + (ay + by * l) * uy)))
+    if (aoLongo > CURVA_MAX * (ux * ux + uy * uy)) continue
+    ajuste.set(c, { ax, bx, ay, by, lMin, lMax })
+  }
+  if (ajuste.size === 0) return () => [0, 0]
+  const colunas = [...ajuste.keys()]
+  const porColuna = [0, 1, 2, 3, 4].map(
+    (c) =>
+      ajuste.get(
+        colunas.reduce((m, k) => (Math.abs(k - c) < Math.abs(m - c) || (Math.abs(k - c) === Math.abs(m - c) && k < m) ? k : m)),
+      )!,
+  )
+  const naColuna = (c: number, l: number): [number, number] => {
+    const a = porColuna[c]
+    const r = Math.min(Math.max(l, a.lMin), a.lMax)
+    return [a.ax + a.bx * r, a.ay + a.by * r]
+  }
+  return (coluna, l) => {
+    const ci = Math.min(Math.max(coluna, 0), 4)
+    const c0 = Math.min(Math.floor(ci), 3)
+    const t = ci - c0
+    const [x0, y0] = naColuna(c0, l)
+    const [x1, y1] = naColuna(c0 + 1, l)
+    return [x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]
+  }
 }
 
 // 9. Ajuste da grade descartando pontos fora do padrão. null se não der para
@@ -421,24 +559,85 @@ function crescerGrade(
     const c = detectados[j]
     return dj < 0.5 * rmed && c.r > 0.6 * rmed && c.r < 1.6 * rmed ? { linha: l, coluna, x: c.x, y: c.y } : null
   }
-  for (let it = 0; it < nQuestoes; it++) {
-    const ls = obs.map((o) => o.linha)
-    const lo = Math.min(...ls) - 1
-    const hi = Math.max(...ls) + 1
-    const novos: Obs[] = []
-    for (let l = lo; l <= hi; l++) {
-      for (let coluna = 0; coluna < 5; coluna++) {
-        const o = casar(prever, l, coluna)
-        if (o) novos.push(o)
+  const crescer = () => {
+    for (let it = 0; it < nQuestoes; it++) {
+      const ls = obs.map((o) => o.linha)
+      const lo = Math.min(...ls) - 1
+      const hi = Math.max(...ls) + 1
+      const novos: Obs[] = []
+      for (let l = lo; l <= hi; l++) {
+        for (let coluna = 0; coluna < 5; coluna++) {
+          const o = casar(prever, l, coluna)
+          if (o) novos.push(o)
+        }
       }
+      if (novos.length <= obs.length) break
+      const p = ajustarGrade(novos, rmed, nQuestoes)
+      if (!p) break
+      obs = novos
+      prever = p
     }
-    if (novos.length <= obs.length) break
-    const p = ajustarGrade(novos, rmed, nQuestoes)
-    if (!p) break
-    obs = novos
-    prever = p
   }
+  // recomeça o crescimento com as observações o, se der para ajustar a grade
+  const recomecar = (o: Obs[]) => {
+    const p = ajustarGrade(o, rmed, nQuestoes)
+    if (!p) return
+    obs = o
+    prever = p
+    crescer()
+  }
+
+  crescer()
+  const presentes = new Set(obs.map((o) => o.coluna))
+  if (presentes.size === 4 && [0, 1, 2, 3].every((c) => presentes.has(c))) {
+    // só 4 colunas nas cadeias, numeradas de 0 a 3: a que falta é a A (folha
+    // arqueada, r-07: o A não fica na altura do B de nenhuma linha) ou a E.
+    // Fica o lado com mais bolinhas resgatadas.
+    const esq = resgatarColuna(obs, prever, detectados, rmed, -1)
+    const dir = resgatarColuna(obs, prever, detectados, rmed, 4)
+    if (esq.length > dir.length)
+      recomecar([...obs.map((o) => ({ ...o, coluna: o.coluna + 1 })), ...esq.map((o) => ({ ...o, coluna: 0 }))])
+  }
+  const resgatadas = [0, 1, 2, 3, 4].flatMap((c) => resgatarColuna(obs, prever, detectados, rmed, c))
+  if (resgatadas.length) recomecar([...obs, ...resgatadas])
   return { obs, prever }
+}
+
+// Coluna inteira deslocada (borda do papel enrolada, r-07): as bolinhas dela
+// caem a mais de 0,5 raio da posição prevista e nenhuma entra na grade. Nas
+// linhas observadas em que a coluna não tem bolinha, procura o círculo mais
+// perto a menos de RESGATE_RAIO do passo de uma linha; os que se deslocaram
+// como a mediana deles (até RESGATE_COERENCIA raio) entram, se forem ao menos
+// RESGATE_MIN. Devolve as observações novas.
+function resgatarColuna(obs: Obs[], prever: Prever, detectados: Detectado[], rmed: number, coluna: number): Obs[] {
+  const ls = obs.map((o) => o.linha)
+  const tem = new Set(obs.filter((o) => o.coluna === coluna).map((o) => o.linha))
+  const cand: (Obs & { dx: number; dy: number })[] = []
+  for (let l = Math.min(...ls); l <= Math.max(...ls); l++) {
+    if (tem.has(l)) continue
+    const [x, y] = prever(coluna, l)
+    const [x1, y1] = prever(coluna, l + 1)
+    let j = -1
+    let dj = Infinity
+    detectados.forEach((c, i) => {
+      const d = Math.hypot(c.x - x, c.y - y)
+      if (d < dj) {
+        dj = d
+        j = i
+      }
+    })
+    if (j < 0) continue
+    const c = detectados[j]
+    if (dj < RESGATE_RAIO * Math.hypot(x1 - x, y1 - y) && c.r > 0.6 * rmed && c.r < 1.6 * rmed)
+      cand.push({ linha: l, coluna, x: c.x, y: c.y, dx: c.x - x, dy: c.y - y })
+  }
+  if (cand.length < RESGATE_MIN) return []
+  const mx = mediana(cand.map((c) => c.dx))
+  const my = mediana(cand.map((c) => c.dy))
+  const bons = cand
+    .filter((c) => Math.hypot(c.dx - mx, c.dy - my) < RESGATE_COERENCIA * rmed)
+    .map(({ linha, coluna: col, x, y }) => ({ linha, coluna: col, x, y }))
+  return bons.length >= RESGATE_MIN ? bons : []
 }
 
 // Posição e forma de cada bolinha: na perspectiva, as bolinhas longe da câmera
@@ -593,8 +792,13 @@ export function pistaDoLado(
     for (let i = 0; i + 1 < linhas.length; i++) {
       const a = linhas[i]
       const b = linhas[i + 1]
-      const ux = (a[4].x - a[0].x) / 4
-      const uy = (a[4].y - a[0].y) / 4
+      // passo de uma coluna na ponta (A→B ou D→E), e não a média da linha:
+      // numa folha arqueada, a linha desce perto da A e da E, e a média
+      // mandava o caminho para longe da linha da questão (r-07: pista 0,02 em
+      // pé)
+      const [p, q] = col === 0 ? [a[0], a[1]] : [a[3], a[4]]
+      const ux = q.x - p.x
+      const uy = q.y - p.y
       const { x: x0, y: y0 } = a[col]
       const { x: x1, y: y1 } = b[col]
       for (const t of LADO_DISTANCIAS) {

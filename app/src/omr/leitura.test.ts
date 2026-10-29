@@ -148,6 +148,32 @@ describe('agruparLinhas', () => {
     expect(gradeSuspeita(g)).toBe(false)
   })
 
+  it('acompanha a folha arqueada', () => {
+    // o meio de cada linha sobe 16 px em relação à A e à E (r-02): a
+    // homografia sozinha errava ~8 px nas pontas
+    const tabela = grade(8).map((linha) => linha.map((c, k) => ({ ...c, y: c.y - 16 * (1 - ((k - 2) / 2) ** 2) })))
+    const g = agruparLinhas(tabela.flat(), 8, anelDa(tabela))!
+    g.linhas.forEach((linha, l) =>
+      linha.forEach((c, k) => expect(Math.hypot(c.x - tabela[l][k].x, c.y - tabela[l][k].y)).toBeLessThan(2)),
+    )
+    expect(gradeSuspeita(g)).toBe(false)
+  })
+
+  for (const [coluna, nome] of [
+    [4, 'E (borda do papel enrolada, r-07)'],
+    [0, 'A (a coluna que falta nas cadeias é a da esquerda)'],
+  ] as const) {
+    it(`acha a coluna ${nome} deslocada 0,4 linha`, () => {
+      // a coluna deslocada não entra em nenhuma cadeia (desnível de 30 px)
+      const tabela = grade(8).map((linha) => linha.map((c, k) => (k === coluna ? { ...c, y: c.y + 30 } : c)))
+      const g = agruparLinhas(tabela.flat(), 8, anelDa(tabela))!
+      g.linhas.forEach((linha, l) =>
+        linha.forEach((c, k) => expect(Math.hypot(c.x - tabela[l][k].x, c.y - tabela[l][k].y)).toBeLessThan(3)),
+      )
+      expect(gradeSuspeita(g)).toBe(false)
+    })
+  }
+
   it('devolve null quando as bolinhas estão todas numa linha só', () => {
     const tabela = grade(1)
     expect(agruparLinhas(tabela.flat(), 8, anelDa(tabela))).toBeNull()

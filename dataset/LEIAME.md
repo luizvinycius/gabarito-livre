@@ -46,4 +46,4 @@ cd app && npm run avaliar          # algoritmo do app, no Node
 Os dois devem dar o mesmo resultado.
 
 ## Conjunto sintético
-Enquanto as fotos não chegam, `python poc/gerar_sinteticas.py` gera em `dataset/sinteticas/` (fora do Git) 89 imagens desenhadas a partir da folha de teste, com caneta, lápis, borracha, sombra, luz amarela, foto torta, recortes deslocados e cortados e tabelas com linhas a mais. Para medir: `python poc/avaliar.py --conjunto sinteticas` e `cd app && npm run avaliar -- --conjunto sinteticas`. Não substitui as fotos reais.
+Enquanto as fotos não chegam, `python poc/gerar_sinteticas.py` gera em `dataset/sinteticas/` (fora do Git) 101 imagens desenhadas a partir da folha de teste, com caneta, lápis, borracha, sombra, luz amarela, foto torta, folha curvada, recortes deslocados e cortados e tabelas com linhas a mais. Para medir: `python poc/avaliar.py --conjunto sinteticas` e `cd app && npm run avaliar -- --conjunto sinteticas`. Não substitui as fotos reais.
