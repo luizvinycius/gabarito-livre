@@ -2,7 +2,14 @@
 
 Atualizado em 28/10/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
 
-## Onde paramos (28/10)
+## Onde paramos (29/10)
+- **48 fotos novas do grupo** (`dataset/fotos/`): `r-01` a `r-12` (recortes das folhas com 4 tabelas), `lo-01` a `lo-12` e dois lotes GS, `gs-b-*` (18h15) e `gs-c-*` (19h53), com nomes por lote porque os códigos se repetem e alguns estão ilegíveis. As 4 fotos de lado ou de cabeça para baixo foram giradas; as tortas ficaram como estavam; 3 fotos repetidas ficaram de fora. As respostas foram anotadas olhando cada tabela ampliada, sem ver a leitura do app, e conferidas nas questões em que o app leu uma letra.
+- **3 correções na leitura (3.4), no Python e no app:** a caneta escura numa luz quente (marrom) e a caneta rosa não são mais apagadas como vermelho do professor (havia **1 erro silencioso**, `gs-b-05` Q6); a pista do lado ignora a mesa e o piso em volta da folha (fotos em pé e nítidas davam tudo `?`); tabela pequena com as bolinhas detectadas é aceita com anel borrado.
+- **Resultado, dataset inteiro (57 fotos, 508 questões):** antes 57,1% certas e 1 erro silencioso; agora **65,2% certas e 0 erro silencioso**. Conjunto sintético: 87,7% → **93,4%**, 0 erro silencioso; a luz amarela, que não era lida, passou a ser. Python e app leram igual em todas as imagens, com os mesmos valores intermediários. **Testes Vitest:** 72. Tempo por folha no PC igual ao de antes (~460 ms nas fotos novas, que mais vezes precisam da imagem 2× maior).
+- [ ] **Conferir a Prova 2 (correção em vermelho do professor, fora do repositório)** com a regra nova do vermelho: as partes escuras da caneta vermelha não podem virar marcação. `python poc/poc_bolhas.py 8 prova2.jpg`.
+- **O que ainda dá `?` (com aviso, nunca nota errada):** folha curvada (`r-02`, `r-07`, `r-11`; a grade projetiva supõe papel plano), foto muito inclinada, escura ou de muito longe (7 fotos em que a tabela nem é encontrada), lápis fraco de longe e caneta vermelha do aluno. Próximos candidatos: grade que acompanha a curvatura (ajuste por coluna) e, para as inclinadas, a busca com escala 3×.
+
+### Antes (28/10)
 - **Primeiras fotos reais do grupo:** 8 folhas (`dataset/fotos/GS-01` a `GS-08`), mandadas pelo WhatsApp (1280 × 720): deitadas, giradas, inclinadas e de longe. Antes, 14 de 76 questões certas; agora 63, **0 erro silencioso**. A GS-07 (tabela com ~200 px na foto) ainda não é lida: o app pede outra foto.
 - **Foto da galeria girada, inclinada ou de longe (3.4, fim da seção):** grade nas 4 orientações, com o lado da folha tirado das linhas da coluna Questão; grade projetiva (perspectiva) com forma local de cada bolinha; nova tentativa com a imagem 2× maior. Lado incerto: tudo `?` e aviso "tire a foto com a folha em pé". A câmera (recorte do quadro-guia) não procura orientação.
 - **Regras novas da leitura (3.4, passos 4 a 13):** anel fraco (3,4) aceito quando as colunas confirmam que a grade não está deslocada; segunda marcação entre 0,4 e 0,6 do destaque vira `?` (a GS-02 Q6, com duas marcadas, era lida como B sem aviso).
@@ -38,7 +45,7 @@ Atualizado em 28/10/2026. O contexto de cada item está na [documentação do pr
 
 ## Agora: fechar a semana 1 (a precisão é o critério que falta)
 - [ ] **Testar no iPhone** a tolerância ao enquadramento (tabela um pouco acima/abaixo do quadro) e o botão "Salvar recorte" (agora na página de teste, link no rodapé ou `#teste`). *Coordenador.*
-- [ ] **Montar o conjunto de 30 a 60 fotos** seguindo o `dataset/LEIAME.md`: fotos mandadas pelo WhatsApp com a lista de respostas (o coordenador importa com `poc/importar.py`) ou recortes salvos pelo app. *Grupo.* 9 até agora (28/10). Pedir fotos **de perto** (tabela grande na imagem) e mandadas **como Documento**: as 8 primeiras vieram comprimidas, e bolinha pequena é a maior causa de `?`.
+- [ ] **Montar o conjunto de 30 a 60 fotos** seguindo o `dataset/LEIAME.md`: fotos mandadas pelo WhatsApp com a lista de respostas (o coordenador importa com `poc/importar.py`) ou recortes salvos pelo app. *Grupo.* 57 até agora (29/10). Pedir fotos **de perto** (tabela grande na imagem) e mandadas **como Documento**: as 8 primeiras vieram comprimidas, e bolinha pequena é a maior causa de `?`.
   - [ ] **Testar no celular a foto da galeria** deitada/inclinada e o aviso de lado incerto; medir o tempo no A32.
   - Cobrir: caneta azul/preta, lápis, marcação fraca, rabiscada, borracha, questão em branco, duas marcadas, sombra, luz amarela, foto torta, **tabela de 10 questões**, Android e iPhone.
 - [ ] **Rodar `python poc/avaliar.py` e `npm run avaliar`** e calibrar os limites com dados reais: gap de 0,15 (`?`), 0,6·gap (`*`), pontuação de anel de 4,3 (tabela cortada) e proporção do quadro (`ALTURA_LINHA` em `app/src/Camera.tsx`).
@@ -65,7 +72,7 @@ Atualizado em 28/10/2026. O contexto de cada item está na [documentação do pr
 - [ ] **Aquecer a primeira captura da câmera:** "preparar foto" levou 1,6 s na primeira vez no A32.
 - [ ] **Remover vermelho:** testar usar só o canal R da imagem, que é mais simples e mais rápido. Validar com o `avaliar.py`.
 - [x] **Tabela com uma linha a mais ou a menos** que o gabarito: avisa nos dois casos (3.4, passo 10). (21/10)
-- [ ] **Luz muito amarela:** a tabela não é encontrada (3.6). Decidir com as fotos do grupo tiradas com luz amarela se vale mudar a remoção do vermelho.
+- [ ] **Luz muito amarela:** resolvida no conjunto sintético e nas fotos do grupo pela regra do vermelho claro (29/10, 3.4 passo 2); falta conferir na Prova 2.
 
 ## Semana 4: piloto e entrega
 - [x] **Deploy no GitHub Pages:** https://luizvinycius.github.io/gabarito-livre/ (21/10).

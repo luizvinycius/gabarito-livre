@@ -253,7 +253,13 @@ describe('gradeSuspeita', () => {
   })
 
   it('não aceita anel abaixo do mínimo fraco', () => {
-    expect(gradeSuspeita({ ...base, aneis: [3.3, 5, 5, 5] })).toBe(true)
+    expect(gradeSuspeita({ ...base, aneis: [3.3, 5, 5, 5], detectadas: [3, 5, 5, 5] })).toBe(true)
+  })
+
+  it('aceita anel borrado numa tabela pequena com quase todas as bolinhas detectadas', () => {
+    // f08 e f20 do grupo: tabela de ~130 px lida com a imagem 2x maior
+    expect(gradeSuspeita({ ...base, aneis: [2.7, 3.2, 3.3, 3.1], detectadas: [5, 4, 5, 5] })).toBe(false)
+    expect(gradeSuspeita({ ...base, aneis: [2.4, 3.2, 3.3, 3.1], detectadas: [5, 4, 5, 5] })).toBe(true)
   })
 })
 
@@ -304,6 +310,22 @@ describe('pistaDoLado', () => {
     expect(pistaDoLado(foto, escuro)).toBeGreaterThan(0.3)
     const invertida = [...foto].reverse().map((linha) => [...linha].reverse())
     expect(pistaDoLado(invertida, escuro)).toBeLessThan(-0.3)
+  })
+
+  it('ignora a textura da mesa em volta da folha', () => {
+    // a folha acaba logo depois da coluna E; dali em diante, madeira escura
+    // com veios na direção das linhas
+    const { foto, escuro } = folhaGirada(0)
+    const bordaDoPapel = 420 + 4 * 60 + 60
+    const naMesa = (px: number, py: number) => {
+      const e = escuro(px, py)
+      return px > bordaDoPapel ? 0.2 + 0.5 * (Math.trunc(py / 7) % 2) : e
+    }
+    const fundo = (px: number) => (px > bordaDoPapel ? 80 : 220)
+    expect(pistaDoLado(foto, naMesa)).toBeLessThan(0.1) // sem olhar o fundo, a mesa empata
+    expect(pistaDoLado(foto, naMesa, fundo)).toBeGreaterThan(0.3)
+    const invertida = [...foto].reverse().map((linha) => [...linha].reverse())
+    expect(pistaDoLado(invertida, naMesa, fundo)).toBeLessThan(-0.3)
   })
 })
 
