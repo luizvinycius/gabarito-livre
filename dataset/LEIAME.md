@@ -34,7 +34,8 @@ O coordenador então:
 
 ## O CSV
 - `respostas`: o que está **marcado na folha**, não o que o app leu. `_` = em branco, `*` = duas marcadas. (`?` = o app tem de pedir confirmação; só o conjunto sintético usa.)
-- `condicao`: itens separados por `;`. Use sempre os mesmos nomes (`caneta azul`, `caneta preta`, `lapis`, `forte`, `fraca`, `rabiscada`, `borracha`, `em branco`, `dupla`, `luz boa`, `sombra`, `luz amarela`, `perto`, `longe`, `torta`), para o relatório agrupar direito.
+- `condicao`: itens separados por `;`. Use sempre os mesmos nomes (`caneta azul`, `caneta preta`, `caneta rosa`, `caneta vermelha`, `lapis`, `forte`, `fraca`, `rabiscada`, `borracha`, `em branco`, `dupla`, `luz boa`, `sombra`, `luz amarela`, `perto`, `longe`, `torta`), para o relatório agrupar direito.
+- Folha com várias tabelas na mesma foto: cada tabela vira um arquivo, recortado com folga e sem endireitar (`r-01` a `r-12`). Foto de lado ou de cabeça para baixo é girada antes de entrar (ninguém corrige assim); foto torta fica como está.
 - Arquivos que começam com `recorte-` são lidos como recorte (800 px); os outros, como folha inteira (1000 px).
 
 ## Medir

@@ -27,6 +27,8 @@ EXTENSOES = ('.jpg', '.jpeg', '.png')
 CONDICOES = {
     'caneta azul': ['azul'],
     'caneta preta': ['preta', 'caneta preto', 'preto'],
+    'caneta rosa': ['rosa', 'caneta roxa', 'roxa', 'lilas'],
+    'caneta vermelha': ['vermelha', 'caneta vermelho'],
     'lapis': ['grafite'],
     'forte': ['marcacao forte'],
     'fraca': ['marcacao fraca', 'fraco', 'leve'],
