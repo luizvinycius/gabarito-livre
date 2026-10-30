@@ -36,6 +36,13 @@ const CHAVE_FOLHAS = 'gabarito-livre:folhas'
 // versão anterior: um gabarito só, sem nome
 const CHAVE_ANTIGA = 'gabarito-livre:gabarito'
 
+// Posições da grade com uma casa decimal: só servem para desenhar a leitura
+// de novo, e as folhas ficam com metade do tamanho no aparelho.
+export function gradeParaGuardar(grade: Circulo[][] | null): Circulo[][] | null {
+  const a = (v: number) => Math.round(v * 10) / 10
+  return grade?.map((linha) => linha.map(({ x, y, r }) => ({ x: a(x), y: a(y), r: a(r) }))) ?? null
+}
+
 export function novoId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
@@ -138,11 +145,19 @@ export function lerDoAparelho(): Estado {
   }
 }
 
+// A lista de folhas já gravada. As operações que só mexem nos gabaritos
+// devolvem a mesma lista, que não precisa ser gravada de novo (com a turma
+// inteira, é o texto maior, e o estado muda a cada toque na tela).
+let folhasGravadas: Folha[] | null = null
+
 // Devolve false se não deu para guardar (sem espaço ou sem permissão).
 export function gravarNoAparelho(e: Estado): boolean {
   try {
     localStorage.setItem(CHAVE_GABARITOS, JSON.stringify({ gabaritos: e.gabaritos, atual: e.atual }))
-    localStorage.setItem(CHAVE_FOLHAS, JSON.stringify(e.folhas))
+    if (e.folhas !== folhasGravadas) {
+      localStorage.setItem(CHAVE_FOLHAS, JSON.stringify(e.folhas))
+      folhasGravadas = e.folhas
+    }
     localStorage.removeItem(CHAVE_ANTIGA)
     return true
   } catch {

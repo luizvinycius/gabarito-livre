@@ -9,6 +9,9 @@
 //   npm run avaliar -- --leituras ts.csv       (grava "arquivo;lido" de cada folha)
 //   npm run avaliar -- --detalhes ts.jsonl     (anéis, detectadas e grade de cada folha;
 //                                               compare com poc/comparar_detalhes.py)
+//   npm run avaliar -- --capturas ../../gabarito-livre-capturas/capturas
+//                                              (capturas da página de teste, com as
+//                                               respostas reais do dados.json)
 //
 // Folhas com linhas a mais que o gabarito contam como '?' em todas as
 // questões: o app lê as primeiras linhas, mas pede para o professor conferir
@@ -20,8 +23,8 @@
 //
 // Sai com código 1 se houver algum erro silencioso.
 
-import { readFileSync, existsSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { readFileSync, existsSync, writeFileSync, readdirSync } from 'node:fs'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import * as opencv from '@techstark/opencv-js'
@@ -31,7 +34,9 @@ const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const LARGURA_FOLHA = 1000
 const LARGURA_RECORTE = 800
 
-type Folha = { arquivo: string; n: number; respostas: string; celular: string; condicoes: string[] }
+// recorte: já vem em pé e no tamanho do quadro-guia (lido na LARGURA_RECORTE,
+// sem procurar); senão, é a folha inteira de uma foto
+type Folha = { arquivo: string; n: number; respostas: string; celular: string; condicoes: string[]; recorte: boolean }
 type Classe = 'certa' | 'aviso' | 'silenciosa'
 
 // Igual ao classificar() do avaliar.py. Esperada '?': o app tem de pedir
@@ -71,9 +76,43 @@ function lerCsv(caminho: string): { folhas: Folha[]; problemas: string[] } {
         respostas,
         celular: v('celular') || '(não informado)',
         condicoes: condicao.split(';').map((c) => c.trim().toLowerCase()).filter(Boolean),
+        recorte: arquivo.startsWith('recorte-'),
       })
   })
   return { folhas, problemas }
+}
+
+// Capturas enviadas pela página de teste (repositório gabarito-livre-capturas):
+// cada pasta tem o recorte.jpg que a leitura recebeu e o dados.json. Entram só
+// as que têm as respostas reais. A câmera manda o recorte do quadro-guia; a
+// galeria, a folha inteira.
+function lerCapturas(pasta: string): { folhas: Folha[]; problemas: string[] } {
+  const folhas: Folha[] = []
+  const problemas: string[] = []
+  const visitar = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) visitar(join(dir, e.name))
+      else if (e.name === 'dados.json') {
+        const d = JSON.parse(readFileSync(join(dir, e.name), 'utf-8'))
+        const respostas = String(d.respostasReais ?? '').toUpperCase()
+        const arquivo = relative(pasta, join(dir, d.imagem?.arquivo ?? 'recorte.jpg'))
+        if (!respostas) continue
+        if (respostas.length !== d.nQuestoes || /[^ABCDE_*?]/.test(respostas))
+          problemas.push(`${arquivo}: respostas "${respostas}" não batem com ${d.nQuestoes} questões`)
+        else
+          folhas.push({
+            arquivo,
+            n: d.nQuestoes,
+            respostas,
+            celular: d.aparelho?.apelido || '(não informado)',
+            condicoes: [d.origem],
+            recorte: String(d.origem).startsWith('camera'),
+          })
+      }
+    }
+  }
+  visitar(pasta)
+  return { folhas: folhas.sort((a, b) => a.arquivo.localeCompare(b.arquivo)), problemas }
 }
 
 function porcentagem(parte: number, todo: number) {
@@ -88,10 +127,11 @@ async function main() {
   }
   const iConjunto = args.indexOf('--conjunto')
   const pasta = iConjunto >= 0 && args[iConjunto + 1] ? join(RAIZ, 'dataset', args[iConjunto + 1]) : join(RAIZ, 'dataset')
+  const capturas = opcao('--capturas', '')
   const csv = opcao('--csv', join(pasta, 'respostas.csv'))
-  const pastaFotos = opcao('--fotos', join(pasta, 'fotos'))
+  const pastaFotos = capturas || opcao('--fotos', join(pasta, 'fotos'))
 
-  const { folhas, problemas } = lerCsv(csv)
+  const { folhas, problemas } = capturas ? lerCapturas(capturas) : lerCsv(csv)
   for (const p of problemas) console.log('AVISO no CSV:', p)
   if (folhas.length === 0) {
     console.log(`Nenhuma folha em ${csv}. Preencha o CSV conforme o dataset/LEIAME.md.`)
@@ -123,7 +163,7 @@ async function main() {
     const pixels = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
     // o recorte do quadro-guia já vem em pé e no tamanho certo; a folha
     // inteira pode estar girada ou pequena na foto (procurar)
-    const recorte = folha.arquivo.startsWith('recorte-')
+    const { recorte } = folha
     const largura = recorte ? LARGURA_RECORTE : LARGURA_FOLHA
     const t0 = performance.now()
     let r: ReturnType<typeof processar>

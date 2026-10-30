@@ -174,7 +174,11 @@ export default function Camera({
   const qx = (1 - qw) / 2
   const qy = (1 - qh) / 2
 
-  function recortar(): HTMLCanvasElement | null {
+  // destino: o canvas da leitura anterior do quadro ao vivo, reaproveitado
+  // (criar um canvas do tamanho do recorte a cada leitura pesa no Android).
+  // Com willReadFrequently, o canvas fica na memória e a leitura pega os
+  // pixels dele sem copiar para outro canvas (pixelsParaLeitura).
+  function recortar(destino?: HTMLCanvasElement): HTMLCanvasElement | null {
     const v = video.current
     if (!v || !tamanho || v.readyState < 2) return null
     const mx = qw * MARGEM_X
@@ -183,10 +187,14 @@ export default function Camera({
     const y0 = Math.max(0, qy - my) * tamanho.h
     const x1 = Math.min(1, qx + qw + mx) * tamanho.w
     const y1 = Math.min(1, qy + qh + my) * tamanho.h
-    const recorte = document.createElement('canvas')
-    recorte.width = Math.round(x1 - x0)
-    recorte.height = Math.round(y1 - y0)
-    recorte.getContext('2d')!.drawImage(v, x0, y0, x1 - x0, y1 - y0, 0, 0, recorte.width, recorte.height)
+    const recorte = destino ?? document.createElement('canvas')
+    const largura = Math.round(x1 - x0)
+    const altura = Math.round(y1 - y0)
+    if (recorte.width !== largura) recorte.width = largura
+    if (recorte.height !== altura) recorte.height = altura
+    recorte
+      .getContext('2d', { willReadFrequently: true })!
+      .drawImage(v, x0, y0, x1 - x0, y1 - y0, 0, 0, recorte.width, recorte.height)
     return recorte
   }
 
@@ -240,12 +248,15 @@ export default function Camera({
         })
       await esperar(0)
       setEstado('procurando')
+      // o mesmo canvas para todas as leituras até a captura, que o entrega
+      let quadro: HTMLCanvasElement | undefined
       while (ativo) {
-        const recorte = recortarAtual.current()
+        const recorte = recortarAtual.current(quadro)
         if (!recorte) {
           await esperar(200)
           continue
         }
+        quadro = recorte
         let r: Leitura
         try {
           r = await analisar!(recorte)

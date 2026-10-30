@@ -20,6 +20,7 @@ import {
   excluirGabarito,
   folhasDoGabarito,
   gabaritoAtual,
+  gradeParaGuardar,
   gravarNoAparelho,
   lerDoAparelho,
   linhasDaTurma,
@@ -149,7 +150,7 @@ export default function Corretor() {
       lidas: leitura?.respostas.map((r) => r.letra) ?? [],
       confirmacoes,
       identificacao: identificacao.trim(),
-      grade: leitura?.grade ?? null,
+      grade: gradeParaGuardar(leitura?.grade ?? null),
       largura: foto.largura,
     }
     setEstado((e) => salvarFolha(e, folha))
