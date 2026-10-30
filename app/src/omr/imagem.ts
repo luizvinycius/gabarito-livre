@@ -27,9 +27,12 @@ export function procurarNaFoto({ largura }: Foto) {
 
 // Pixels da foto com até o dobro da largura da leitura: a redução final é
 // feita no worker, com o INTER_AREA do OpenCV, para dar o mesmo resultado
-// do protótipo em Python.
+// do protótipo em Python. O recorte da câmera já vem num canvas pequeno o
+// bastante: os pixels saem direto dele.
 export function pixelsParaLeitura({ fonte, largura }: Foto): ImageData {
   const fator = Math.min(1, (2 * largura) / fonte.width)
+  if (fator === 1 && fonte instanceof HTMLCanvasElement)
+    return fonte.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, fonte.width, fonte.height)
   const envio = document.createElement('canvas')
   envio.width = Math.round(fonte.width * fator)
   envio.height = Math.round(fonte.height * fator)

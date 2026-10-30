@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   type Estado,
   acertoPorQuestao,
@@ -11,6 +11,8 @@ import {
   encerrarSessao,
   escolherGabarito,
   estadoInicial,
+  gradeParaGuardar,
+  gravarNoAparelho,
   excluirFolha,
   excluirGabarito,
   gabaritoAtual,
@@ -203,5 +205,49 @@ describe('acertoPorQuestao e exportação', () => {
 
   it('gera o texto curto das notas', () => {
     expect(notasTexto(linhasDaTurma(turma())).split('\n')[1]).toBe('Folha 2\t\t6')
+  })
+})
+
+describe('guardar no aparelho', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('arredonda a grade para uma casa decimal', () => {
+    expect(gradeParaGuardar([[{ x: 10.04, y: 20.06, r: 7.449 }]])).toEqual([[{ x: 10, y: 20.1, r: 7.4 }]])
+    expect(gradeParaGuardar(null)).toBeNull()
+  })
+
+  it('só grava as folhas de novo quando elas mudam', () => {
+    const gravados: string[] = []
+    vi.stubGlobal('localStorage', {
+      setItem: (chave: string) => gravados.push(chave),
+      removeItem: () => {},
+    })
+    let e = comGabarito()
+    e = salvarFolha(e, folha(e, 'BABCDACC'))
+    expect(gravarNoAparelho(e)).toBe(true)
+    expect(gravados).toEqual(['gabarito-livre:gabaritos', 'gabarito-livre:folhas'])
+    gravados.length = 0
+    gravarNoAparelho(mudarGabarito(e, { ...gabaritoAtual(e), nome: 'Prova B' }))
+    expect(gravados).toEqual(['gabarito-livre:gabaritos'])
+    gravarNoAparelho(excluirFolha(e, e.folhas[0].id))
+    expect(gravados).toEqual(['gabarito-livre:gabaritos', 'gabarito-livre:gabaritos', 'gabarito-livre:folhas'])
+  })
+
+  it('tenta gravar as folhas de novo depois de uma falha', () => {
+    let falhar = true
+    const gravados: string[] = []
+    vi.stubGlobal('localStorage', {
+      setItem: (chave: string) => {
+        if (chave === 'gabarito-livre:folhas' && falhar) throw new Error('sem espaço')
+        gravados.push(chave)
+      },
+      removeItem: () => {},
+    })
+    let e = comGabarito()
+    e = salvarFolha(e, folha(e, 'BABCDACC', { id: 'outra' }))
+    expect(gravarNoAparelho(e)).toBe(false)
+    falhar = false
+    expect(gravarNoAparelho(e)).toBe(true)
+    expect(gravados.at(-1)).toBe('gabarito-livre:folhas')
   })
 })

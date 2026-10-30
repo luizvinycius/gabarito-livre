@@ -24,10 +24,14 @@ async function carregar() {
   cv = m
   // Aquecimento: a primeira execução de cada função do OpenCV é bem mais
   // lenta (o navegador ainda está compilando). Roda uma leitura numa folha
-  // em branco para a primeira folha de verdade já sair rápida.
+  // em branco para a primeira folha de verdade já sair rápida. A faixa
+  // vermelho-clara (como a correção do professor) faz passar também pelas
+  // etapas que só rodam quando há vermelho para apagar.
   const largura = 800
   const altura = 700
-  processar(m, largura, altura, new Uint8Array(largura * altura * 4).fill(255).buffer, 8, largura)
+  const folha = new Uint8Array(largura * altura * 4).fill(255)
+  for (let i = 0; i < largura * 40; i++) folha.set([255, 120, 120], 4 * i)
+  processar(m, largura, altura, folha.buffer, 8, largura)
   responder({ tipo: 'pronto', versao: versaoOpenCV(m) })
 }
 

@@ -2,7 +2,14 @@
 
 Atualizado em 28/10/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
 
-## Onde paramos (29/10, envio de capturas)
+## Onde paramos (29/10, noite: capturas analisadas e leitor mais rápido)
+- **40 capturas no repositório de capturas** (iPhone 11, iPhone 14 Pro, Galaxy A32 e o celular do Rhuan), com as respostas reais conferidas na foto e gravadas no `dados.json` de cada uma. `npm run avaliar -- --capturas ../../gabarito-livre-capturas/capturas` mede o leitor nelas; o Node lê exatamente o que cada celular leu. **84,2% das questões certas, 1 erro silencioso** (Galaxy, GS-07 a lápis, Q5 com B e E lida B). Caneta azul ou preta bem pintada: 100%.
+- **Decisão: caneta vermelha e lápis fraco ficam fora.** Quase todos os `?` vêm de marca a lápis ou cinza, e a caneta vermelha do aluno é apagada como correção do professor. Em prova real a caneta vermelha não é permitida e os professores cobram caneta para marcar o gabarito.
+- **Tabela cortada vira "tabela não encontrada"** nas 2 capturas manuais com a coluna E fora do quadro (a 193424 ficou 58 quadros em "cortada" ao vivo). A mensagem poderia pedir para afastar o celular.
+- **Leitor ~30% mais rápido, com a saída idêntica** (3.5): o vermelho num laço só, sem as imagens HSV, e o fundo do papel não refeito quando não há vermelho. A redução para 800 px virou a etapa `reduzir` nos tempos. Na câmera, o canvas do recorte é reaproveitado e lido direto. Página de teste fora do pacote principal (carrega só no `#teste`). Folhas gravadas no aparelho só quando mudam, com a grade em uma casa decimal. **Testes Vitest:** 104.
+- [ ] **Medir no A32 e no iPhone** o tempo por leitura e o "preparar foto" com o código novo (página de teste).
+
+### Antes (29/10, envio de capturas)
 - **Página de teste envia a captura para um repositório privado (3.5):** `gabarito-livre-capturas` (privado: pode ter prova real). Vai a imagem que a leitura recebeu e um `dados.json` com a leitura, a grade, os tempos, o aparelho, a versão do app e o **log do quadro ao vivo** (cada leitura até a captura e o estado do quadro). A página de teste ganhou a captura automática do app (o mesmo leitor, um OpenCV só). O mesmo token *fine-grained* serve para vários celulares; o apelido de cada aparelho vai no nome da pasta (`HHMMSS-8q-iphone-11`). Repositório público é recusado. Testado: envio real pelo PC (imagem idêntica, apagada depois) e, no navegador, a chamada à API e a recusa do token inválido. **Testes Vitest:** 87.
 - [ ] **Testar o envio no iPhone** com um token de verdade e mandar as capturas das folhas que deram trabalho, com as respostas reais.
 - [x] **Folha amassada no quadro-guia** (que dava "A tabela está saindo do quadro"): lida desde o PR #4, testado no iPhone.
@@ -80,7 +87,7 @@ Atualizado em 28/10/2026. O contexto de cada item está na [documentação do pr
 - [x] **PWA:** instalável e offline, com o OpenCV em cache (testado no Chrome do PC, 21/10).
 - [ ] **PWA no celular:** instalar no iPhone e no A32 e medir de novo o carregamento no A32; se continuar ruim, avaliar um build do OpenCV só com as funções usadas.
 - [ ] **Aquecer a primeira captura da câmera:** "preparar foto" levou 1,6 s na primeira vez no A32.
-- [ ] **Remover vermelho:** testar usar só o canal R da imagem, que é mais simples e mais rápido. Validar com o `avaliar.py`.
+- [x] **Remover vermelho mais rápido:** a mesma faixa do HSV num laço só, sem mudar a leitura (29/10). Usar só o canal R mudaria a leitura e não foi preciso.
 - [x] **Tabela com uma linha a mais ou a menos** que o gabarito: avisa nos dois casos (3.4, passo 10). (21/10)
 - [x] **Luz muito amarela:** resolvida no conjunto sintético e nas fotos do grupo pela regra do vermelho claro (29/10, 3.4 passo 2), conferida em 2 provas reais com correção em vermelho.
 

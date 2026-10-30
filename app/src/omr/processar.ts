@@ -9,22 +9,36 @@ import { type Detectado, type Forma, decidir, gradeSuspeita, lerGrade } from './
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type CV = any
 
-// Limites de cor do inRange: são do tamanho da imagem, então são criados
-// uma vez para cada tamanho e reaproveitados entre as leituras.
-let limitesVermelho: { largura: number; altura: number; mats: CV[] } | null = null
+// Faixa de cor do vermelho, no HSV de 8 bits do OpenCV (matiz de 0 a 180):
+// matiz até VERMELHO_MATIZ[0] ou a partir de VERMELHO_MATIZ[1], saturação e
+// valor a partir de VERMELHO_SATURACAO e VERMELHO_VALOR. Igual aos dois
+// cv2.inRange do protótipo.
+const VERMELHO_MATIZ = [12, 155]
+const VERMELHO_SATURACAO = 60
+const VERMELHO_VALOR = 40
 
-function limitesDoVermelho(cv: CV, largura: number, altura: number): CV[] {
-  if (limitesVermelho?.largura !== largura || limitesVermelho.altura !== altura) {
-    limitesVermelho?.mats.forEach((m) => m.delete())
-    const faixa = (h: number, s: number, v: number) =>
-      new cv.Mat(altura, largura, cv.CV_8UC3, new cv.Scalar(h, s, v))
-    limitesVermelho = {
-      largura,
-      altura,
-      mats: [faixa(0, 60, 40), faixa(12, 255, 255), faixa(155, 60, 40), faixa(180, 255, 255)],
-    }
-  }
-  return limitesVermelho.mats
+// Tabelas do RGB2HSV de 8 bits do OpenCV (deslocamento de 12 bits), para
+// calcular a matiz e a saturação exatamente como o cv.cvtColor.
+const DIV_SATURACAO = new Int32Array(256)
+const DIV_MATIZ = new Int32Array(256)
+for (let i = 1; i < 256; i++) {
+  DIV_SATURACAO[i] = Math.round((255 << 12) / i)
+  DIV_MATIZ[i] = Math.round((180 << 12) / (6 * i))
+}
+
+/**
+ * Pixel na faixa de cor do vermelho: o mesmo que converter para HSV com o
+ * cv.cvtColor e aplicar os dois cv.inRange, sem criar as imagens (conferido
+ * nas 16,7 milhões de cores). Só há vermelho com o R como maior canal: com o
+ * G ou o B, a matiz fica entre 30 e 150.
+ */
+export function naFaixaDoVermelho(r: number, g: number, b: number): boolean {
+  if (r < g || r < b || r < VERMELHO_VALOR) return false
+  const d = r - Math.min(g, b)
+  if ((d * DIV_SATURACAO[r] + 2048) >> 12 < VERMELHO_SATURACAO) return false
+  let h = ((g - b) * DIV_MATIZ[d] + 2048) >> 12
+  if (h < 0) h += 180
+  return h <= VERMELHO_MATIZ[0] || h >= VERMELHO_MATIZ[1]
 }
 
 export function versaoOpenCV(m: CV): string {
@@ -129,11 +143,9 @@ function lerNaEscala(
     cv.resize(original, rgba, new cv.Size(0, 0), escala, escala, cv.INTER_AREA)
     const largura = rgba.cols
     const altura = rgba.rows
-    const rgb = nova(new cv.Mat())
-    const hsv = nova(new cv.Mat())
+    marcar('reduzir')
     const cinza = nova(new cv.Mat())
-    const verm1 = nova(new cv.Mat())
-    const verm2 = nova(new cv.Mat())
+    const vermelho = nova(new cv.Mat(altura, largura, cv.CV_8UC1))
     const binaria = nova(new cv.Mat())
     const contornos = nova(new cv.MatVector())
     const hierarquia = nova(new cv.Mat())
@@ -145,22 +157,30 @@ function lerNaEscala(
     // caneta escura numa luz quente (marrom) e a caneta rosa também caem na
     // faixa de cor do vermelho, mas ficam bem mais escuras que o papel em
     // volta (VERMELHO_ESCURO)
-    const [baixo1, alto1, baixo2, alto2] = limitesDoVermelho(cv, largura, altura)
-    cv.cvtColor(rgba, rgb, cv.COLOR_RGBA2RGB)
-    cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV)
-    cv.inRange(hsv, baixo1, alto1, verm1)
-    cv.inRange(hsv, baixo2, alto2, verm2)
-    cv.bitwise_or(verm1, verm2, verm1)
     cv.cvtColor(rgba, cinza, cv.COLOR_RGBA2GRAY)
     fundoDoPapel(cv, cinza, pequena, fundo)
-    const vermelho: Uint8Array = verm1.data
+    // as vistas dos dados só depois de criar as Mats: o OpenCV pode realocar a
+    // memória e invalidar uma vista antiga. Cada pixel RGBA é lido de uma vez,
+    // como um número de 32 bits (R no byte mais baixo: os celulares e PCs são
+    // little-endian).
+    const u8: Uint8Array = rgba.data
+    const px = new Uint32Array(u8.buffer, u8.byteOffset, largura * altura)
+    const mascara: Uint8Array = vermelho.data
     const cinzaAntes: Uint8Array = cinza.data
     const fundoAntes: Uint8Array = fundo.data
-    for (let i = 0; i < vermelho.length; i++) {
-      if (vermelho[i] && cinzaAntes[i] < VERMELHO_ESCURO * (fundoAntes[i] + 1)) vermelho[i] = 0
+    let temVermelho = false
+    for (let i = 0; i < mascara.length; i++) {
+      const p = px[i]
+      const apagar =
+        naFaixaDoVermelho(p & 255, (p >>> 8) & 255, (p >>> 16) & 255) &&
+        cinzaAntes[i] >= VERMELHO_ESCURO * (fundoAntes[i] + 1)
+      mascara[i] = apagar ? 255 : 0
+      temVermelho ||= apagar
     }
-    cv.dilate(verm1, verm1, kernel)
-    cinza.setTo(new cv.Scalar(255), verm1)
+    if (temVermelho) {
+      cv.dilate(vermelho, vermelho, kernel)
+      cinza.setTo(new cv.Scalar(255), vermelho)
+    }
     marcar('remover vermelho')
 
     // 3. limiar adaptativo + contornos
@@ -201,8 +221,9 @@ function lerNaEscala(
     }
     marcar('filtrar círculos')
 
-    // 11. normalizar a iluminação
-    fundoDoPapel(cv, cinza, pequena, fundo)
+    // 11. normalizar a iluminação. Sem vermelho apagado, o cinza não mudou e
+    // o fundo já calculado no passo 2 é o mesmo.
+    if (temVermelho) fundoDoPapel(cv, cinza, pequena, fundo)
     marcar('normalizar iluminação')
 
     // 5 a 10. estimar a grade (nas 4 orientações, se procurar)
@@ -271,29 +292,31 @@ function escuridao({ cinza, fundo, largura }: Imagem, px: number, py: number): n
 // ficam achatadas). Procura o anel numa vizinhança pequena (até 0,3 raio de
 // deslocamento), porque a grade erra alguns pixels nas pontas. Igual ao
 // ring_score do protótipo.
+// Amostras do notaAnel: 24 ângulos em volta da bolinha, o anel entre 0,7 e
+// 1,1 do raio, o papel a 1,4 e o centro deslocado até 0,3.
+const ANEL_COS = Array.from({ length: 24 }, (_, k) => Math.cos((2 * Math.PI * k) / 24))
+const ANEL_SEN = Array.from({ length: 24 }, (_, k) => Math.sin((2 * Math.PI * k) / 24))
+const ANEL_RAIOS = [0.7, 0.8, 0.9, 1.0, 1.1]
+const ANEL_DESLOCAMENTOS = [-0.3, 0, 0.3]
+
 function notaAnel(img: Imagem, x: number, y: number, [a, b, c, d]: Forma): number | null {
   // margem: o ponto mais longe amostrado (papel em volta, a 1,4 da elipse,
   // com o centro deslocado até 0,3); no círculo, 1,8 raio
   const ex = Math.max(1.8 * Math.hypot(a, b), 1.4 * Math.hypot(a, b) + 0.3 * (Math.abs(a) + Math.abs(b)))
   const ey = Math.max(1.8 * Math.hypot(c, d), 1.4 * Math.hypot(c, d) + 0.3 * (Math.abs(c) + Math.abs(d)))
   if (x < ex || x >= img.largura - ex || y < ey || y >= img.altura - ey) return null
-  const ox: number[] = []
-  const oy: number[] = []
-  for (let k = 0; k < 24; k++) {
-    const t = (2 * Math.PI * k) / 24
-    ox.push(a * Math.cos(t) + b * Math.sin(t))
-    oy.push(c * Math.cos(t) + d * Math.sin(t))
-  }
+  const ox = ANEL_COS.map((cos, k) => a * cos + b * ANEL_SEN[k])
+  const oy = ANEL_COS.map((cos, k) => c * cos + d * ANEL_SEN[k])
   let melhor = 0
-  for (const dx of [-0.3, 0, 0.3]) {
-    for (const dy of [-0.3, 0, 0.3]) {
+  for (const dx of ANEL_DESLOCAMENTOS) {
+    for (const dy of ANEL_DESLOCAMENTOS) {
       const cx = x + dx * a + dy * b
       const cy = y + dx * c + dy * d
       let anel = 0
       let fora = 0
       for (let k = 0; k < 24; k++) {
         let max = 0
-        for (const f of [0.7, 0.8, 0.9, 1.0, 1.1]) {
+        for (const f of ANEL_RAIOS) {
           max = Math.max(max, escuridao(img, Math.trunc(cx + f * ox[k]), Math.trunc(cy + f * oy[k])))
         }
         anel += max
