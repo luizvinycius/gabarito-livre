@@ -46,19 +46,37 @@ export function processar(
   larguraAlvo: number,
   procurar = false,
 ): Resposta {
+  const inicio = performance.now()
   const original = new cv.Mat(alturaOriginal, larguraOriginal, cv.CV_8UC4)
+  let melhor: { leitura: Leitura; situacao: number } | null = null
+  let copiar = 0
+  let liberar = 0
+  let descartada = 0
   try {
     original.data.set(new Uint8Array(pixels))
-    let melhor: { leitura: Leitura; situacao: number } | null = null
+    copiar = performance.now() - inicio
     for (const fator of procurar ? ESCALAS : [1]) {
       const lida = lerNaEscala(cv, original, nQuestoes, larguraAlvo * fator, procurar)
-      if (!melhor || lida.situacao > melhor.situacao) melhor = { ...lida, leitura: reduzir(lida.leitura, fator) }
+      if (!melhor || lida.situacao > melhor.situacao) {
+        if (melhor) descartada += somaDosTempos(melhor.leitura.tempos)
+        melhor = { ...lida, leitura: reduzir(lida.leitura, fator) }
+      } else descartada += somaDosTempos(lida.leitura.tempos)
       if (lida.situacao === 2) break
     }
-    return melhor!.leitura
   } finally {
+    const t = performance.now()
     original.delete()
+    liberar = performance.now() - t
   }
+  const { leitura } = melhor!
+  const tempos: Record<string, number> = { 'copiar foto': copiar, ...leitura.tempos }
+  tempos['liberar memória'] += liberar
+  if (descartada) tempos['tentativa descartada'] = descartada
+  return { ...leitura, tempos, total: somaDosTempos(tempos) }
+}
+
+function somaDosTempos(tempos: Record<string, number>) {
+  return Object.values(tempos).reduce((a, b) => a + b, 0)
 }
 
 // Traz as posições lidas numa escala maior de volta para a largura alvo.
@@ -123,19 +141,26 @@ function lerNaEscala(
 
     // 4. filtrar círculos: os redondos montam a grade; os achatados pela
     // perspectiva só contam como bolinha detectada numa posição prevista
+    // Cada teste só roda se o anterior passou, do mais barato ao mais caro: nas
+    // capturas, isso tirou cerca de 1/3 do tempo do filtro, com os mesmos círculos.
     const circulos: Detectado[] = []
-    for (let i = 0; i < contornos.size(); i++) {
+    const nContornos = contornos.size()
+    for (let i = 0; i < nContornos; i++) {
       const c = contornos.get(i)
       const area = cv.contourArea(c)
       if (area >= 150) {
-        const { center, radius } = cv.minEnclosingCircle(c)
-        const per = cv.arcLength(c, true)
-        const circ = per ? (4 * Math.PI * area) / (per * per) : 0
         const caixa = cv.boundingRect(c)
         const prop = caixa.width / caixa.height
-        if (circ > 0.6 && prop > 1 / PROPORCAO_MAX && prop < PROPORCAO_MAX && radius > 8 && radius < 40) {
-          const redondo = prop > PROPORCAO_RODA[0] && prop < PROPORCAO_RODA[1]
-          circulos.push({ x: center.x, y: center.y, r: radius, redondo })
+        if (prop > 1 / PROPORCAO_MAX && prop < PROPORCAO_MAX) {
+          const per = cv.arcLength(c, true)
+          const circ = per ? (4 * Math.PI * area) / (per * per) : 0
+          if (circ > 0.6) {
+            const { center, radius } = cv.minEnclosingCircle(c)
+            if (radius > 8 && radius < 40) {
+              const redondo = prop > PROPORCAO_RODA[0] && prop < PROPORCAO_RODA[1]
+              circulos.push({ x: center.x, y: center.y, r: radius, redondo })
+            }
+          }
         }
       }
       c.delete()
@@ -177,12 +202,11 @@ function lerNaEscala(
     })
     marcar('ler respostas')
 
-    const total = Object.values(tempos).reduce((a, b) => a + b, 0)
     const leitura: Leitura = {
       tipo: 'resultado',
       tempos,
-      total,
-      contornos: contornos.size(),
+      total: 0, // o processar soma, com as etapas de fora daqui
+      contornos: nContornos,
       circulos: unicos.map(({ x, y, r }) => ({ x, y, r })),
       grade: grade?.linhas ?? null,
       tabelaCortada,
@@ -195,6 +219,8 @@ function lerNaEscala(
     return { leitura, situacao: !grade ? 0 : tabelaCortada || ladoIncerto ? 1 : 2 }
   } finally {
     for (const m of mats) m.delete()
+    // vai para o mesmo objeto tempos da leitura devolvida
+    marcar('liberar memória')
   }
 }
 
