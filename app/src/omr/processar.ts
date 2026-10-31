@@ -9,38 +9,6 @@ import { type Detectado, type Forma, decidir, gradeSuspeita, lerGrade } from './
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type CV = any
 
-// Faixa de cor do vermelho, no HSV de 8 bits do OpenCV (matiz de 0 a 180):
-// matiz até VERMELHO_MATIZ[0] ou a partir de VERMELHO_MATIZ[1], saturação e
-// valor a partir de VERMELHO_SATURACAO e VERMELHO_VALOR. Igual aos dois
-// cv2.inRange do protótipo.
-const VERMELHO_MATIZ = [12, 155]
-const VERMELHO_SATURACAO = 60
-const VERMELHO_VALOR = 40
-
-// Tabelas do RGB2HSV de 8 bits do OpenCV (deslocamento de 12 bits), para
-// calcular a matiz e a saturação exatamente como o cv.cvtColor.
-const DIV_SATURACAO = new Int32Array(256)
-const DIV_MATIZ = new Int32Array(256)
-for (let i = 1; i < 256; i++) {
-  DIV_SATURACAO[i] = Math.round((255 << 12) / i)
-  DIV_MATIZ[i] = Math.round((180 << 12) / (6 * i))
-}
-
-/**
- * Pixel na faixa de cor do vermelho: o mesmo que converter para HSV com o
- * cv.cvtColor e aplicar os dois cv.inRange, sem criar as imagens (conferido
- * nas 16,7 milhões de cores). Só há vermelho com o R como maior canal: com o
- * G ou o B, a matiz fica entre 30 e 150.
- */
-export function naFaixaDoVermelho(r: number, g: number, b: number): boolean {
-  if (r < g || r < b || r < VERMELHO_VALOR) return false
-  const d = r - Math.min(g, b)
-  if ((d * DIV_SATURACAO[r] + 2048) >> 12 < VERMELHO_SATURACAO) return false
-  let h = ((g - b) * DIV_MATIZ[d] + 2048) >> 12
-  if (h < 0) h += 180
-  return h <= VERMELHO_MATIZ[0] || h >= VERMELHO_MATIZ[1]
-}
-
 export function versaoOpenCV(m: CV): string {
   try {
     const info: string = m.getBuildInformation()
@@ -60,14 +28,6 @@ const ESCALAS = [1, 2]
 // inclinada, as bolinhas longe da câmera viram elipses de até ~1,4.
 const PROPORCAO_RODA = [0.75, 1.33]
 const PROPORCAO_MAX = 1.6
-
-// Tinta da cor do vermelho mais escura que esta fração do papel em volta é
-// marcação do aluno e fica. Nas fotos do grupo, dentro das bolinhas pintadas:
-// caneta escura numa luz quente (marrom) de 0,24 a 0,35 e caneta rosa de 0,31
-// a 0,35, que antes sumiam (a bolinha pintada saía mais clara que as vazias e
-// uma dupla virava uma letra só, sem aviso); caneta vermelha de 0,42 a 0,47,
-// que continua apagada. Igual ao VERMELHO_ESCURO do protótipo.
-const VERMELHO_ESCURO = 0.38
 
 type Leitura = Extract<Resposta, { tipo: 'resultado' }>
 
@@ -145,43 +105,15 @@ function lerNaEscala(
     const altura = rgba.rows
     marcar('reduzir')
     const cinza = nova(new cv.Mat())
-    const vermelho = nova(new cv.Mat(altura, largura, cv.CV_8UC1))
     const binaria = nova(new cv.Mat())
     const contornos = nova(new cv.MatVector())
     const hierarquia = nova(new cv.Mat())
     const fundo = nova(new cv.Mat())
     const pequena = nova(new cv.Mat())
-    const kernel = nova(cv.Mat.ones(3, 3, cv.CV_8U))
 
-    // 2. tinta vermelha do professor vira branco. Só o vermelho claro: a
-    // caneta escura numa luz quente (marrom) e a caneta rosa também caem na
-    // faixa de cor do vermelho, mas ficam bem mais escuras que o papel em
-    // volta (VERMELHO_ESCURO)
+    // 2. converter para cinza
     cv.cvtColor(rgba, cinza, cv.COLOR_RGBA2GRAY)
-    fundoDoPapel(cv, cinza, pequena, fundo)
-    // as vistas dos dados só depois de criar as Mats: o OpenCV pode realocar a
-    // memória e invalidar uma vista antiga. Cada pixel RGBA é lido de uma vez,
-    // como um número de 32 bits (R no byte mais baixo: os celulares e PCs são
-    // little-endian).
-    const u8: Uint8Array = rgba.data
-    const px = new Uint32Array(u8.buffer, u8.byteOffset, largura * altura)
-    const mascara: Uint8Array = vermelho.data
-    const cinzaAntes: Uint8Array = cinza.data
-    const fundoAntes: Uint8Array = fundo.data
-    let temVermelho = false
-    for (let i = 0; i < mascara.length; i++) {
-      const p = px[i]
-      const apagar =
-        naFaixaDoVermelho(p & 255, (p >>> 8) & 255, (p >>> 16) & 255) &&
-        cinzaAntes[i] >= VERMELHO_ESCURO * (fundoAntes[i] + 1)
-      mascara[i] = apagar ? 255 : 0
-      temVermelho ||= apagar
-    }
-    if (temVermelho) {
-      cv.dilate(vermelho, vermelho, kernel)
-      cinza.setTo(new cv.Scalar(255), vermelho)
-    }
-    marcar('remover vermelho')
+    marcar('converter para cinza')
 
     // 3. limiar adaptativo + contornos
     cv.adaptiveThreshold(cinza, binaria, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY_INV, 31, 8)
@@ -221,9 +153,8 @@ function lerNaEscala(
     }
     marcar('filtrar círculos')
 
-    // 11. normalizar a iluminação. Sem vermelho apagado, o cinza não mudou e
-    // o fundo já calculado no passo 2 é o mesmo.
-    if (temVermelho) fundoDoPapel(cv, cinza, pequena, fundo)
+    // 11. normalizar a iluminação
+    fundoDoPapel(cv, cinza, pequena, fundo)
     marcar('normalizar iluminação')
 
     // 5 a 10. estimar a grade (nas 4 orientações, se procurar)
