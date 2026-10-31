@@ -61,13 +61,6 @@ RESGATE_MIN = 3
 # confirma; abaixo, é rasura leve e vale a primeira.
 DUPLA = 0.6
 DUPLA_DUVIDA = 0.4
-# Tinta da cor do vermelho mais escura que esta fração do papel em volta é
-# marcação do aluno e fica (student_ink_gray). Nas fotos do grupo, dentro das
-# bolinhas pintadas: caneta escura numa luz quente (marrom) de 0,24 a 0,35 e
-# caneta rosa de 0,31 a 0,35, que antes sumiam (a bolinha pintada saía mais
-# clara que as vazias e uma dupla virava uma letra só, sem aviso); caneta
-# vermelha de 0,42 a 0,47, que continua apagada.
-VERMELHO_ESCURO = 0.38
 
 # Foto inteira escolhida da galeria (procurar=True): a folha pode estar
 # deitada, de cabeça para baixo, girada ou pequena na foto. A leitura testa
@@ -93,19 +86,6 @@ LADO_PAPEL = 0.75
 # A foto como está (sem girar 90° ou 180°) só perde para outra orientação se
 # a pista dela for maior por mais que esta margem.
 MARGEM_EM_PE = 0.05
-
-
-def student_ink_gray(img):
-    """Cinza onde a caneta vermelha do professor vira branco. Só o vermelho
-    claro: a caneta escura numa luz quente (marrom) e a caneta rosa também
-    caem na faixa de cor do vermelho, mas ficam bem mais escuras que o papel
-    em volta (ver VERMELHO_ESCURO)."""
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    red = cv2.inRange(hsv, (0, 60, 40), (12, 255, 255)) | cv2.inRange(hsv, (155, 60, 40), (180, 255, 255))
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    red[gray < VERMELHO_ESCURO * light_background(gray)] = 0
-    gray[cv2.dilate(red, np.ones((3, 3), np.uint8)) > 0] = 255
-    return gray
 
 
 def find_circles(gray):
@@ -797,7 +777,7 @@ def read_scaled(img, n_q, target_w, procurar):
     achou."""
     s = target_w / img.shape[1]
     img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
-    gray = student_ink_gray(img)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     fundo = light_background(gray)
     norm = normalize_light(gray, fundo)
     rows, rings, dets, extras, rmed, cols, incerta = read_grade(find_circles(gray), n_q, norm, procurar, fundo)

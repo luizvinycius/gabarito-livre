@@ -1,10 +1,14 @@
 # Backlog
 
-Atualizado em 28/10/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
+Atualizado em 30/10/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
 
-## Onde paramos (29/10, noite: capturas analisadas e leitor mais rápido)
+## Onde paramos (30/10: leitor sem remover o vermelho)
+- **A etapa "remover vermelho" saiu do leitor** (3.5), no Python e no app: o professor escreve em vermelho depois de passar o leitor. Recorte no PC: 43,7 → 38,6 ms. Questões certas: dataset 344 de 508, sintético 850 de 894, capturas 301 de 354, sem erro silencioso novo. **Testes Vitest:** 90 (os 14 que saíram testavam a faixa do vermelho).
+- [ ] **Medir no A32 e no iPhone** o ganho no celular. A etapa mais cara agora é `reduzir`.
+
+### Antes (29/10, noite: capturas analisadas e leitor mais rápido)
 - **40 capturas no repositório de capturas** (iPhone 11, iPhone 14 Pro, Galaxy A32 e o celular do Rhuan), com as respostas reais conferidas na foto e gravadas no `dados.json` de cada uma. `npm run avaliar -- --capturas ../../gabarito-livre-capturas/capturas` mede o leitor nelas; o Node lê exatamente o que cada celular leu. **84,2% das questões certas, 1 erro silencioso** (Galaxy, GS-07 a lápis, Q5 com B e E lida B). Caneta azul ou preta bem pintada: 100%.
-- **Decisão: caneta vermelha e lápis fraco ficam fora.** Quase todos os `?` vêm de marca a lápis ou cinza, e a caneta vermelha do aluno é apagada como correção do professor. Em prova real a caneta vermelha não é permitida e os professores cobram caneta para marcar o gabarito.
+- **Decisão: caneta vermelha e lápis fraco ficam fora.** Quase todos os `?` vêm de marca a lápis ou cinza, e a caneta vermelha do aluno era apagada como correção do professor (desde 30/10, não é mais apagada, mas continua fora do escopo). Em prova real a caneta vermelha não é permitida e os professores cobram caneta para marcar o gabarito.
 - **Tabela cortada vira "tabela não encontrada"** nas 2 capturas manuais com a coluna E fora do quadro (a 193424 ficou 58 quadros em "cortada" ao vivo). A mensagem poderia pedir para afastar o celular.
 - **Leitor ~30% mais rápido, com a saída idêntica** (3.5): o vermelho num laço só, sem as imagens HSV, e o fundo do papel não refeito quando não há vermelho. A redução para 800 px virou a etapa `reduzir` nos tempos. Na câmera, o canvas do recorte é reaproveitado e lido direto. Página de teste fora do pacote principal (carrega só no `#teste`). Folhas gravadas no aparelho só quando mudam, com a grade em uma casa decimal. **Testes Vitest:** 104.
 - [ ] **Medir no A32 e no iPhone** o tempo por leitura e o "preparar foto" com o código novo (página de teste).
