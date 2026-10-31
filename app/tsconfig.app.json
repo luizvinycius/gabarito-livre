@@ -22,5 +22,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  /* carrega o OpenCV pelo require do Node: fica no tsconfig.scripts.json */
+  "exclude": ["src/omr/aquecimento.test.ts"]
 }

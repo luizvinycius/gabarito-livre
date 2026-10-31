@@ -63,6 +63,12 @@ function ms(n: number) {
   return `${Math.round(n)} ms`
 }
 
+// O que a ida e volta gasta fora das etapas medidas: a fila até o worker, a
+// volta da resposta e a tela ocupada.
+function espera(m: Medicao) {
+  return m.idaEVolta - m.preparo - m.total
+}
+
 const arred = (v: number, casas = 2) => Math.round(v * 10 ** casas) / 10 ** casas
 const circulo = ({ x, y, r }: Circulo) => [arred(x, 1), arred(y, 1), arred(r, 1)]
 
@@ -294,7 +300,7 @@ export default function PaginaTeste() {
     ...medicoes.map(
       (m, i) =>
         `Rodada ${i + 1}: total ${ms(m.idaEVolta)} ` +
-        `(preparo ${ms(m.preparo)}, worker ${ms(m.total)}), ` +
+        `(preparo ${ms(m.preparo)}, worker ${ms(m.total)}, espera ${ms(espera(m))}), ` +
         `${m.circulos.length} círculos em ${m.contornos} contornos`,
     ),
     ...(ultima ? [`Respostas lidas: ${textoRespostas(ultima.respostas)}`] : []),
@@ -529,6 +535,12 @@ export default function PaginaTeste() {
                   ))}
                 </tr>
               ))}
+              <tr>
+                <td>espera (o resto do total)</td>
+                {medicoes.map((m, i) => (
+                  <td key={i}>{ms(espera(m))}</td>
+                ))}
+              </tr>
               <tr className="total">
                 <td>total</td>
                 {medicoes.map((m, i) => (

@@ -2,7 +2,12 @@
 
 Atualizado em 30/10/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
 
-## Onde paramos (30/10: leitor sem remover o vermelho)
+## Onde paramos (30/10: primeiras leituras e tempo oculto)
+- **Tempo oculto na página de teste** (3.5): novas linhas `copiar foto`, `liberar memória`, `tentativa descartada` e `espera`.
+- **Aquecimento com folhas desenhadas e filtro de círculos do teste mais barato ao mais caro**, com a saída idêntica nas 198 imagens. No PC, a 1ª leitura de um recorte caiu de ~75 para ~38 ms; o aquecimento subiu de ~25 para ~145 ms. **Testes Vitest:** 94.
+- [ ] **Medir no Android da página de teste:** a 1ª rodada, a linha `espera` e o tempo de carregar o leitor.
+
+### Antes (30/10: leitor sem remover o vermelho)
 - **A etapa "remover vermelho" saiu do leitor** (3.5), no Python e no app: o professor escreve em vermelho depois de passar o leitor. Recorte no PC: 43,7 → 38,6 ms. Questões certas: dataset 344 de 508, sintético 850 de 894, capturas 301 de 354, sem erro silencioso novo. **Testes Vitest:** 90 (os 14 que saíram testavam a faixa do vermelho).
 - [ ] **Medir no A32 e no iPhone** o ganho no celular. A etapa mais cara agora é `reduzir`.
 

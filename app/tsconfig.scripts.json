@@ -20,5 +20,12 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["scripts", "src/omr/processar.ts", "src/omr/leitura.ts", "src/omr/protocolo.ts"]
+  "include": [
+    "scripts",
+    "src/omr/processar.ts",
+    "src/omr/leitura.ts",
+    "src/omr/protocolo.ts",
+    "src/omr/aquecimento.ts",
+    "src/omr/aquecimento.test.ts"
+  ]
 }
