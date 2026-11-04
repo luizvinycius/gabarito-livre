@@ -3,8 +3,9 @@
 // corrigidas abertas de novo para rever ou corrigir. Gabaritos e folhas
 // ficam no aparelho (sessao.ts), as fotos no IndexedDB (fotos.ts).
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Camera from '../Camera'
+import { prepararSom, tocar, tomDaLeitura } from '../som'
 import { type Confirmacao, corrigir } from '../correcao'
 import { apagarFotos, guardarFoto, lerFoto } from '../fotos'
 import { type Foto, LARGURA_RECORTE, larguraDoArquivo } from '../omr/imagem'
@@ -105,6 +106,16 @@ export default function Corretor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [foto, idFoto, leitor.pronto, leitor.ler])
 
+  // Bip quando a leitura da folha nova fica pronta, uma vez por foto: "plim"
+  // se saiu limpa, tom de conferir se há dúvida ou a leitura falhou.
+  const bipDaFoto = useRef(0)
+  useEffect(() => {
+    if (etapa !== 'resultado' || bipDaFoto.current === idFoto) return
+    if (!leitura && !erroLeitura) return
+    bipDaFoto.current = idFoto
+    tocar(leitura ? tomDaLeitura(leitura, nQuestoes) : 'conferir')
+  }, [etapa, idFoto, leitura, erroLeitura, nQuestoes])
+
   function usarFoto(nova: Foto, pronta: Leitura | null = null) {
     if (foto?.fonte instanceof ImageBitmap) foto.fonte.close()
     setFoto(nova)
@@ -125,7 +136,9 @@ export default function Corretor() {
     }
   }
 
+  // chamada sempre de um toque: libera o áudio do bip no iPhone
   function abrirCamera(proximaFolha = false) {
+    prepararSom()
     setExigirTroca(proximaFolha)
     setCameraLigada(true)
     setEtapa('camera')
@@ -232,6 +245,7 @@ export default function Corretor() {
             atalhos={atalhos}
             aviso={!foto ? erroLeitura : null}
             onGaleria={(arquivo) => void escolherFoto(arquivo)}
+            comSom
             visivel={etapa === 'camera'}
             exigirTroca={exigirTroca}
             analisar={leitor.pronto ? analisar : undefined}

@@ -2,7 +2,7 @@
 
 Atualizado em 04/11/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
 
-## Onde paramos (04/11: medido no iPhone e no A32, abordagem mantida, câmera em tela cheia)
+## Onde paramos (04/11: medido no iPhone e no A32, abordagem mantida, câmera em tela cheia e bip)
 - **Medido no celular, com o código de 30/10 (`ca154a2`)**, no repositório de capturas (`capturas/2026-11-04`, 2 capturas de 10 questões em cada aparelho, a mesma folha lida `BABCDACCEC` nos dois). Medianas, antes (`346ac88`, 29/10) → agora:
   - **iPhone 11:** leitura de um recorte 106 → 95 ms; 1ª rodada do quadro ao vivo 145 → 106 ms; rodadas seguintes 116 → 93 ms. `reduzir` 41 ms, `espera` 5 a 50 ms, OpenCV carregado em 0,75 s.
   - **Galaxy A32:** leitura 357 → 265 ms; 1ª rodada 520 → 336 ms; rodadas seguintes 348 → 278 ms. `reduzir` 133 ms (metade da leitura), `espera` 15 ms, OpenCV em 2,2 s.
@@ -10,7 +10,8 @@ Atualizado em 04/11/2026. O contexto de cada item está na [documentação do pr
   - Poucas capturas por aparelho (2 no iPhone e no A32): o ganho de ~25% bate com o do PC, mas é uma amostra pequena.
 - **Decisão (04/11): manter a abordagem** (ler a tabela de respostas que o professor já usa, seção 2.3) e apresentar o projeto assim. Gabaritos próprios com marcações ficam como planejamento futuro (Depois do MVP).
 - **Câmera em tela cheia:** no iPhone e no Android, os botões "Desligar" e "Capturar" ficavam abaixo da dobra e era preciso rolar a página. Agora a câmera cobre a tela: título e dica em cima, vídeo no meio e os botões sempre embaixo (com "Captura automática" e "Galeria"). O vídeo cobre a área como a câmera do celular, cortando as bordas, mas nunca a ponto de o quadro sair da tela (`app/src/visor.ts`). A página de baixo não rola com a câmera aberta. O recorte da leitura não mudou (sai do vídeo inteiro). Conferido no Chrome do PC com câmera falsa em 414×715 (iPhone 11 no Safari), 360×660, 320×520 e deitado (800×360): os botões ficam dentro da tela em todos. **Testes Vitest:** 102.
-- [ ] **Testar a câmera em tela cheia no iPhone e no A32** (no Safari e no app instalado).
+- **Bip ao ler a folha** (`app/src/som.ts`): quando a leitura fica pronta, um "plim" curto e leve de dois tons subindo se ela saiu limpa, e dois tons descendo se o professor precisa conferir (questão em dúvida, tabela cortada, não encontrada ou com linhas a mais, ou erro na leitura). Gerado pelo navegador (Web Audio), sem arquivo, funciona sem internet. Caixa visível "Som ao ler a folha" nos controles da câmera, ligada por padrão e lembrada no aparelho. No iPhone, o áudio é liberado no toque em "Começar a correção" (e nos outros botões que abrem a câmera) e respeita a chave do silencioso. Só no app do professor, não na página de teste. Conferido no Chrome do PC: a captura automática toca o "plim" (880 e 1319 Hz) com o bloqueio de autoplay ligado, e nada toca com a caixa desmarcada. **Testes Vitest:** 113.
+- [ ] **Testar a câmera em tela cheia e o bip no iPhone e no A32** (no Safari e no app instalado; no iPhone, com a chave do silencioso ligada e desligada).
 
 ### Antes (30/10: primeiras leituras e tempo oculto)
 - **Tempo oculto na página de teste** (3.5): novas linhas `copiar foto`, `liberar memória`, `tentativa descartada` e `espera`.
