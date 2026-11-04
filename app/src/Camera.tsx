@@ -11,19 +11,16 @@
 // folha sai do quadro ou as letras mudam, para não pegar a mesma folha duas
 // vezes.
 
-import { useEffect, useRef, useState } from 'react'
+//
+// A câmera ocupa a tela inteira (por cima da página), com os botões sempre
+// visíveis embaixo: antes, no celular, era preciso rolar a página para achar
+// o "Capturar". A geometria do quadro e do vídeo na tela está em visor.ts.
+
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { type EstadoQuadro, type TentativaQuadro, avaliarQuadro, parada } from './captura'
 import type { Leitura } from './omr/useLeitor'
+import { LINHAS_CABECALHO, type Tamanho, quadroNoVideo, tamanhoVisor } from './visor'
 
-// Proporções da tabela da Univag. A altura aparente de cada linha muda muito
-// com o ângulo da câmera (nas fotos de teste, de 6% a 9% da largura da
-// tabela); o quadro usa um valor alto para a tabela nunca ficar cortada,
-// e a folga vertical do recorte cobre o resto.
-// TODO: recalibrar com o modelo oficial quando chegar (seção 6).
-const ALTURA_LINHA = 0.11
-const LINHAS_CABECALHO = 1
-// Largura do quadro em relação à largura do vídeo na tela.
-const LARGURA_QUADRO = 0.84
 // Margem extra no recorte, em fração do tamanho do quadro, para tolerar
 // uma tabela fora do lugar. Na vertical é maior: deslocar para cima ou para
 // baixo é o erro mais comum, e linhas de texto a mais no recorte não
@@ -35,10 +32,6 @@ const MARGEM_Y = 0.3
 const PAUSA = 120
 
 const CHAVE_AUTOMATICO = 'gabarito-livre:captura-automatica'
-
-function proporcaoQuadro(nQuestoes: number) {
-  return (nQuestoes + LINHAS_CABECALHO) * ALTURA_LINHA
-}
 
 const MENSAGEM: Record<EstadoQuadro, string> = {
   desligado: '',
@@ -60,6 +53,14 @@ function automaticoSalvo() {
 
 type Props = {
   nQuestoes: number
+  // na barra de cima (por exemplo, "Folha 3 · Prova A")
+  titulo?: string
+  // botões no canto da barra de cima (Turma, Gabarito)
+  atalhos?: ReactNode
+  // mensagem de erro acima dos botões (por exemplo, da foto da galeria)
+  aviso?: string | null
+  // com ele, aparece o botão de escolher uma foto da galeria
+  onGaleria?: (arquivo: File | undefined) => void
   // Escondida, a câmera continua ligada para a próxima folha.
   visivel: boolean
   // Ao abrir para a próxima folha, a captura automática espera a folha
@@ -76,6 +77,10 @@ type Props = {
 
 export default function Camera({
   nQuestoes,
+  titulo,
+  atalhos,
+  aviso,
+  onGaleria,
   visivel,
   exigirTroca,
   analisar,
@@ -84,7 +89,9 @@ export default function Camera({
   onTentativa,
 }: Props) {
   const video = useRef<HTMLVideoElement>(null)
-  const [tamanho, setTamanho] = useState<{ w: number; h: number } | null>(null)
+  const area = useRef<HTMLDivElement>(null)
+  const [tamanho, setTamanho] = useState<Tamanho | null>(null)
+  const [tamanhoArea, setTamanhoArea] = useState<Tamanho>({ w: 0, h: 0 })
   const [erro, setErro] = useState<string | null>(null)
   const [automatico, setAutomatico] = useState(automaticoSalvo)
   const [estado, setEstado] = useState<EstadoQuadro>('desligado')
@@ -146,6 +153,27 @@ export default function Camera({
     }
   }, [])
 
+  // Tamanho da área entre a barra de cima e os botões: muda ao girar o
+  // celular e quando a barra do Safari aparece ou some. Escondida, mede 0.
+  useEffect(() => {
+    const el = area.current
+    if (!el) return
+    const medir = () => setTamanhoArea({ w: el.clientWidth, h: el.clientHeight })
+    medir()
+    const observador = new ResizeObserver(medir)
+    observador.observe(el)
+    return () => observador.disconnect()
+  }, [])
+
+  // Com a câmera na tela, a página de baixo não rola (no iPhone, arrastar
+  // a câmera rolava a página e escondia os botões).
+  useEffect(() => {
+    if (!visivel) return
+    const raiz = document.documentElement
+    raiz.classList.add('camera-aberta')
+    return () => raiz.classList.remove('camera-aberta')
+  }, [visivel])
+
   // O Safari pausa o vídeo escondido; ao mostrar de novo, retoma. Ao abrir
   // para a próxima folha, a captura automática espera a troca da folha.
   useEffect(() => {
@@ -162,17 +190,10 @@ export default function Camera({
     }
   }, [automatico])
 
-  // Quadro em frações do vídeo (0 a 1). Se a tabela ficar alta demais para o
-  // vídeo, reduz a largura para caber.
-  const proporcao = proporcaoQuadro(nQuestoes)
-  let qw = LARGURA_QUADRO
-  let qh = tamanho ? (qw * proporcao * tamanho.w) / tamanho.h : 0
-  if (qh > 0.9) {
-    qw *= 0.9 / qh
-    qh = 0.9
-  }
-  const qx = (1 - qw) / 2
-  const qy = (1 - qh) / 2
+  // Quadro em frações do vídeo (0 a 1) e o tamanho do vídeo na tela (px).
+  const quadro = quadroNoVideo(nQuestoes, tamanho)
+  const { x: qx, y: qy, w: qw, h: qh } = quadro
+  const visor = tamanhoVisor(tamanhoArea, tamanho, quadro)
 
   // destino: o canvas da leitura anterior do quadro ao vivo, reaproveitado
   // (criar um canvas do tamanho do recorte a cada leitura pesa no Android).
@@ -302,57 +323,82 @@ export default function Camera({
   }, [autoLigado, analisar, nQuestoes])
   const situacao: EstadoQuadro = autoLigado ? estado : 'desligado'
 
+  // antes de medir, o visor ocupa a área inteira (o CSS); depois, o tamanho
+  // do vídeo na tela
+  const estiloVisor = visor.w ? { width: `${visor.w}px`, height: `${visor.h}px` } : undefined
+  const alturaCabecalho = `${(LINHAS_CABECALHO / (nQuestoes + LINHAS_CABECALHO)) * 100}%`
+
   return (
-    <div className="camera">
-      {erro ? (
-        <p className="erro">
-          Não consegui abrir a câmera: {erro}. Confira se o site tem permissão para usar a câmera.
-        </p>
-      ) : (
-        <div
-          className="visor"
-          style={tamanho ? { aspectRatio: `${tamanho.w} / ${tamanho.h}` } : undefined}
-        >
-          <video ref={video} playsInline muted autoPlay />
-          {tamanho && (
-            <div
-              className={`quadro estado-${situacao}`}
-              style={{
-                left: `${qx * 100}%`,
-                top: `${qy * 100}%`,
-                width: `${qw * 100}%`,
-                height: `${qh * 100}%`,
-              }}
-            >
-              <div className="cabecalho" style={{ height: `${(LINHAS_CABECALHO / (nQuestoes + LINHAS_CABECALHO)) * 100}%` }}>
-                Questão · Respostas
-              </div>
-            </div>
-          )}
-          {situacao !== 'desligado' && (
-            <div className={`situacao estado-${situacao}`} role="status">
-              {MENSAGEM[situacao]}
-            </div>
-          )}
-          {flash > 0 && <div key={flash} className="flash" />}
+    <div className="camera" role="dialog" aria-modal="true" aria-label={titulo ?? 'Câmera'}>
+      <header className="camera-topo">
+        <div className="camera-titulo">
+          {titulo && <h2>{titulo}</h2>}
+          <p className="dica">
+            Encaixe a tabela ({nQuestoes} questões) no quadro, com o cabeçalho na faixa de cima.
+          </p>
         </div>
-      )}
-      <p className="dica">
-        Encaixe a tabela de respostas ({nQuestoes} questões) dentro do quadro, com o cabeçalho na
-        faixa de cima.
-        {automatico && analisar && ' A foto é tirada sozinha quando a tabela encaixa.'}
-      </p>
-      <label className="alternar">
-        <input type="checkbox" checked={automatico} onChange={(e) => setAutomatico(e.target.checked)} />
-        Captura automática
-      </label>
-      <div className="acoes">
-        <button className="botao secundario" onClick={onFechar}>
-          Desligar
-        </button>
-        <button className="botao" disabled={!tamanho} onClick={capturar}>
-          📸 Capturar
-        </button>
+        {atalhos && <div className="atalhos">{atalhos}</div>}
+      </header>
+
+      <div className="camera-area" ref={area}>
+        {erro ? (
+          <p className="erro">
+            Não consegui abrir a câmera: {erro}. Confira se o site tem permissão para usar a câmera.
+          </p>
+        ) : (
+          <div className="visor" style={estiloVisor}>
+            <video ref={video} playsInline muted autoPlay />
+            {tamanho && (
+              <div
+                className={`quadro estado-${situacao}`}
+                style={{
+                  left: `${qx * 100}%`,
+                  top: `${qy * 100}%`,
+                  width: `${qw * 100}%`,
+                  height: `${qh * 100}%`,
+                }}
+              >
+                <div className="cabecalho" style={{ height: alturaCabecalho }}>
+                  Questão · Respostas
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {situacao !== 'desligado' && (
+          <div className={`situacao estado-${situacao}`} role="status">
+            {MENSAGEM[situacao]}
+          </div>
+        )}
+        {flash > 0 && <div key={flash} className="flash" />}
+      </div>
+
+      <div className="camera-controles">
+        {aviso && (
+          <p className="erro" role="alert">
+            {aviso}
+          </p>
+        )}
+        <div className="acoes">
+          <button className="botao secundario" onClick={onFechar}>
+            Desligar
+          </button>
+          <button className="botao" disabled={!tamanho} onClick={capturar}>
+            📸 Capturar
+          </button>
+        </div>
+        <div className="camera-opcoes">
+          <label className="alternar">
+            <input type="checkbox" checked={automatico} onChange={(e) => setAutomatico(e.target.checked)} />
+            Captura automática
+          </label>
+          {onGaleria && (
+            <label className="chip">
+              🖼️ Galeria
+              <input type="file" accept="image/*" onChange={(e) => onGaleria(e.target.files?.[0])} />
+            </label>
+          )}
+        </div>
       </div>
     </div>
   )

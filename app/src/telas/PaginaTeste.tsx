@@ -329,9 +329,10 @@ export default function PaginaTeste() {
       </header>
 
       {camera !== 'desligada' && (
-        <section className="cartao" hidden={camera === 'escondida'}>
+        <section hidden={camera === 'escondida'}>
           <Camera
             nQuestoes={nQuestoes}
+            titulo="Teste da leitura"
             visivel={camera === 'visivel'}
             exigirTroca={false}
             analisar={leitor.pronto ? analisar : undefined}

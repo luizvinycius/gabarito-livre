@@ -1,26 +1,36 @@
 # Backlog
 
-Atualizado em 30/10/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
+Atualizado em 04/11/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
 
-## Onde paramos (30/10: primeiras leituras e tempo oculto)
+## Onde paramos (04/11: medido no iPhone e no A32, abordagem mantida, câmera em tela cheia)
+- **Medido no celular, com o código de 30/10 (`ca154a2`)**, no repositório de capturas (`capturas/2026-11-04`, 2 capturas de 10 questões em cada aparelho, a mesma folha lida `BABCDACCEC` nos dois). Medianas, antes (`346ac88`, 29/10) → agora:
+  - **iPhone 11:** leitura de um recorte 106 → 95 ms; 1ª rodada do quadro ao vivo 145 → 106 ms; rodadas seguintes 116 → 93 ms. `reduzir` 41 ms, `espera` 5 a 50 ms, OpenCV carregado em 0,75 s.
+  - **Galaxy A32:** leitura 357 → 265 ms; 1ª rodada 520 → 336 ms; rodadas seguintes 348 → 278 ms. `reduzir` 133 ms (metade da leitura), `espera` 15 ms, OpenCV em 2,2 s.
+  - **Oppo A6K** (22 capturas de 30/10 com `ca154a2`): leitura 469 ms, 1ª rodada 728 ms, rodadas seguintes 349 ms, `espera` 86 ms, OpenCV em 3,1 s. É o aparelho mais lento medido.
+  - Poucas capturas por aparelho (2 no iPhone e no A32): o ganho de ~25% bate com o do PC, mas é uma amostra pequena.
+- **Decisão (04/11): manter a abordagem** (ler a tabela de respostas que o professor já usa, seção 2.3) e apresentar o projeto assim. Gabaritos próprios com marcações ficam como planejamento futuro (Depois do MVP).
+- **Câmera em tela cheia:** no iPhone e no Android, os botões "Desligar" e "Capturar" ficavam abaixo da dobra e era preciso rolar a página. Agora a câmera cobre a tela: título e dica em cima, vídeo no meio e os botões sempre embaixo (com "Captura automática" e "Galeria"). O vídeo cobre a área como a câmera do celular, cortando as bordas, mas nunca a ponto de o quadro sair da tela (`app/src/visor.ts`). A página de baixo não rola com a câmera aberta. O recorte da leitura não mudou (sai do vídeo inteiro). Conferido no Chrome do PC com câmera falsa em 414×715 (iPhone 11 no Safari), 360×660, 320×520 e deitado (800×360): os botões ficam dentro da tela em todos. **Testes Vitest:** 102.
+- [ ] **Testar a câmera em tela cheia no iPhone e no A32** (no Safari e no app instalado).
+
+### Antes (30/10: primeiras leituras e tempo oculto)
 - **Tempo oculto na página de teste** (3.5): novas linhas `copiar foto`, `liberar memória`, `tentativa descartada` e `espera`.
 - **Aquecimento com folhas desenhadas e filtro de círculos do teste mais barato ao mais caro**, com a saída idêntica nas 198 imagens. No PC, a 1ª leitura de um recorte caiu de ~75 para ~38 ms; o aquecimento subiu de ~25 para ~145 ms. **Testes Vitest:** 94.
-- [ ] **Medir no Android da página de teste:** a 1ª rodada, a linha `espera` e o tempo de carregar o leitor.
+- [x] **Medir no Android da página de teste:** a 1ª rodada, a linha `espera` e o tempo de carregar o leitor (04/11, acima).
 
 ### Antes (30/10: leitor sem remover o vermelho)
 - **A etapa "remover vermelho" saiu do leitor** (3.5), no Python e no app: o professor escreve em vermelho depois de passar o leitor. Recorte no PC: 43,7 → 38,6 ms. Questões certas: dataset 344 de 508, sintético 850 de 894, capturas 301 de 354, sem erro silencioso novo. **Testes Vitest:** 90 (os 14 que saíram testavam a faixa do vermelho).
-- [ ] **Medir no A32 e no iPhone** o ganho no celular. A etapa mais cara agora é `reduzir`.
+- [x] **Medir no A32 e no iPhone** o ganho no celular (04/11, acima). A etapa mais cara continua sendo `reduzir`.
 
 ### Antes (29/10, noite: capturas analisadas e leitor mais rápido)
 - **40 capturas no repositório de capturas** (iPhone 11, iPhone 14 Pro, Galaxy A32 e o celular do Rhuan), com as respostas reais conferidas na foto e gravadas no `dados.json` de cada uma. `npm run avaliar -- --capturas ../../gabarito-livre-capturas/capturas` mede o leitor nelas; o Node lê exatamente o que cada celular leu. **84,2% das questões certas, 1 erro silencioso** (Galaxy, GS-07 a lápis, Q5 com B e E lida B). Caneta azul ou preta bem pintada: 100%.
 - **Decisão: caneta vermelha e lápis fraco ficam fora.** Quase todos os `?` vêm de marca a lápis ou cinza, e a caneta vermelha do aluno era apagada como correção do professor (desde 30/10, não é mais apagada, mas continua fora do escopo). Em prova real a caneta vermelha não é permitida e os professores cobram caneta para marcar o gabarito.
 - **Tabela cortada vira "tabela não encontrada"** nas 2 capturas manuais com a coluna E fora do quadro (a 193424 ficou 58 quadros em "cortada" ao vivo). A mensagem poderia pedir para afastar o celular.
 - **Leitor ~30% mais rápido, com a saída idêntica** (3.5): o vermelho num laço só, sem as imagens HSV, e o fundo do papel não refeito quando não há vermelho. A redução para 800 px virou a etapa `reduzir` nos tempos. Na câmera, o canvas do recorte é reaproveitado e lido direto. Página de teste fora do pacote principal (carrega só no `#teste`). Folhas gravadas no aparelho só quando mudam, com a grade em uma casa decimal. **Testes Vitest:** 104.
-- [ ] **Medir no A32 e no iPhone** o tempo por leitura e o "preparar foto" com o código novo (página de teste).
+- [x] **Medir no A32 e no iPhone** o tempo por leitura e o "preparar foto" com o código novo (página de teste): 04/11, no topo.
 
 ### Antes (29/10, envio de capturas)
 - **Página de teste envia a captura para um repositório privado (3.5):** `gabarito-livre-capturas` (privado: pode ter prova real). Vai a imagem que a leitura recebeu e um `dados.json` com a leitura, a grade, os tempos, o aparelho, a versão do app e o **log do quadro ao vivo** (cada leitura até a captura e o estado do quadro). A página de teste ganhou a captura automática do app (o mesmo leitor, um OpenCV só). O mesmo token *fine-grained* serve para vários celulares; o apelido de cada aparelho vai no nome da pasta (`HHMMSS-8q-iphone-11`). Repositório público é recusado. Testado: envio real pelo PC (imagem idêntica, apagada depois) e, no navegador, a chamada à API e a recusa do token inválido. **Testes Vitest:** 87.
-- [ ] **Testar o envio no iPhone** com um token de verdade e mandar as capturas das folhas que deram trabalho, com as respostas reais.
+- [x] **Testar o envio no iPhone** com um token de verdade (iPhone 11, 29/10 e 04/11) e mandar as capturas das folhas que deram trabalho, com as respostas reais.
 - [x] **Folha amassada no quadro-guia** (que dava "A tabela está saindo do quadro"): lida desde o PR #4, testado no iPhone.
 
 ### Antes (29/10, noite)
@@ -75,7 +85,7 @@ Atualizado em 30/10/2026. O contexto de cada item está na [documentação do pr
   - [ ] **Testar no celular a foto da galeria** deitada/inclinada e o aviso de lado incerto; medir o tempo no A32.
   - Cobrir: caneta azul/preta, lápis, marcação fraca, rabiscada, borracha, questão em branco, duas marcadas, sombra, luz amarela, foto torta, **tabela de 10 questões**, Android e iPhone.
 - [ ] **Rodar `python poc/avaliar.py` e `npm run avaliar`** e calibrar os limites com dados reais: gap de 0,15 (`?`), 0,6·gap (`*`), pontuação de anel de 4,3 (tabela cortada) e proporção do quadro (`ALTURA_LINHA` em `app/src/Camera.tsx`).
-- [ ] **Decidir:** se a precisão não chegar perto de 99%, reavaliar a abordagem (folha própria com marcadores, seção 2.3).
+- [x] **Decidir:** se a precisão não chegar perto de 99%, reavaliar a abordagem (folha própria com marcadores, seção 2.3). **Decidido em 04/11: manter a abordagem** e apresentar o projeto sem a folha própria, que fica como planejamento futuro (Depois do MVP).
 - [x] **Avaliar o código do app, e não só o do Python:** `npm run avaliar` (21/10).
 
 ## Semana 2: app básico (MVP, seção 2.1)
@@ -115,3 +125,7 @@ Atualizado em 30/10/2026. O contexto de cada item está na [documentação do pr
 
 ## Depois do MVP (seção 1.4)
 Identificação do aluno, planilha de notas para o AVA, provas A e B embaralhadas, análise das questões que mais confundiram, dissertativas, IA como segundo corretor, curadoria das regras do NDE e geração de questões presa ao material da aula.
+
+Sugestões e planejamento futuro (registrados em 04/11, fora da apresentação):
+- **Gabaritos próprios com marcações**, nos formatos horizontal e vertical: testar a leitura com uma folha do próprio app, com marcadores nos cantos (a alternativa da seção 2.3). Marcadores dão a posição exata da tabela e devem subir a precisão perto dos 99%.
+- **Celular como câmera do computador:** o professor abre o Gabarito Livre no PC, que mostra um QR code; o celular escaneia com a câmera do próprio aparelho e as duas telas ficam numa sessão só. O celular continua lendo a folha e manda ao PC só o resultado e o recorte; o PC mostra a nota, a turma e as questões em dúvida na tela grande, enquanto o celular já segue para a próxima folha. Viabilidade: WebRTC direto entre os dois aparelhos, com um servidor pequeno só para o pareamento (Supabase Realtime ou Cloudflare Worker, plano grátis). Pontos de atenção: precisa de internet para parear (o modo só no celular continua sem internet), redes da faculdade podem bloquear a conexão direta (aí os dados passam por um servidor intermediário, o que muda a promessa de que a foto não sai do celular), o Safari derruba a conexão quando a tela apaga (reconectar sozinho e não perder folhas). Estimativa: 1 a 2 semanas.
