@@ -176,22 +176,28 @@ export default function Corretor() {
 
   const gabaritoEditando = editando && estado.gabaritos.find((g) => g.id === editando.gabaritoId)
 
+  // no topo da página e, com a câmera aberta (que cobre a página), na barra
+  // de cima da câmera
+  const atalhos = (
+    <>
+      {etapa !== 'gabarito' && etapa !== 'folha' && (
+        <button className="chip" onClick={() => setEtapa('gabarito')}>
+          Gabarito
+        </button>
+      )}
+      {(etapa === 'gabarito' || etapa === 'camera') && estado.folhas.length > 0 && (
+        <button className="chip" onClick={() => setEtapa('turma')}>
+          Turma ({estado.folhas.length})
+        </button>
+      )}
+    </>
+  )
+
   return (
     <main>
       <header className="topo">
         <h1>Gabarito Livre</h1>
-        <div className="atalhos">
-          {etapa !== 'gabarito' && etapa !== 'folha' && (
-            <button className="chip" onClick={() => setEtapa('gabarito')}>
-              Gabarito
-            </button>
-          )}
-          {(etapa === 'gabarito' || etapa === 'camera') && estado.folhas.length > 0 && (
-            <button className="chip" onClick={() => setEtapa('turma')}>
-              Turma ({estado.folhas.length})
-            </button>
-          )}
-        </div>
+        <div className="atalhos">{atalhos}</div>
       </header>
 
       {semEspaco && (
@@ -219,12 +225,13 @@ export default function Corretor() {
       )}
 
       {cameraLigada && (
-        <section className="cartao" hidden={etapa !== 'camera'}>
-          <h2>
-            Folha {estado.folhas.length + 1} · {gabarito.nome}
-          </h2>
+        <section hidden={etapa !== 'camera'}>
           <Camera
             nQuestoes={nQuestoes}
+            titulo={`Folha ${estado.folhas.length + 1} · ${gabarito.nome}`}
+            atalhos={atalhos}
+            aviso={!foto ? erroLeitura : null}
+            onGaleria={(arquivo) => void escolherFoto(arquivo)}
             visivel={etapa === 'camera'}
             exigirTroca={exigirTroca}
             analisar={leitor.pronto ? analisar : undefined}
@@ -234,11 +241,6 @@ export default function Corretor() {
             }}
             onCapturar={(recorte, pronta) => usarFoto({ fonte: recorte, largura: LARGURA_RECORTE }, pronta)}
           />
-          {erroLeitura && !foto && <p className="erro">{erroLeitura}</p>}
-          <label className="botao secundario">
-            🖼️ Escolher foto da galeria
-            <input type="file" accept="image/*" onChange={(e) => escolherFoto(e.target.files?.[0])} />
-          </label>
         </section>
       )}
 

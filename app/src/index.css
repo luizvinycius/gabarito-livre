@@ -147,18 +147,132 @@ canvas {
   color: #c62828;
 }
 
-.visor {
-  position: relative;
-  width: 100%;
-  background: #000;
-  border-radius: 12px;
+/* ---- câmera em tela cheia ---- */
+
+/* com a câmera aberta, a página de baixo não rola */
+html.camera-aberta,
+html.camera-aberta body {
   overflow: hidden;
+}
+
+/* Cobre a tela visível inteira: no Safari, o fundo fica acima da barra de
+   endereço; no app instalado, acima da barra do iPhone (safe-area). */
+.camera {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  color: #fff;
+  overscroll-behavior: contain;
+}
+
+.camera-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: max(10px, env(safe-area-inset-top)) 16px 8px;
+}
+
+.camera-titulo {
+  min-width: 0;
+}
+
+.camera-titulo h2 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 1.05rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.camera .dica {
+  margin: 2px 0 0;
+  color: #bdbdbd;
+  font-size: 0.85rem;
+}
+
+.camera .chip {
+  border-color: rgb(255 255 255 / 35%);
+  background: rgb(255 255 255 / 12%);
+  color: #fff;
+}
+
+.camera .chip input {
+  display: none;
+}
+
+/* a área do vídeo fica com todo o espaço que sobra */
+.camera-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.camera-area > .erro {
+  padding: 16px;
+  color: #ff8a80;
+}
+
+/* O vídeo no centro da área, com o tamanho calculado em visor.ts (pode
+   passar da área: as bordas cortadas ficam fora da tela). */
+.visor {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
 }
 
 .visor video {
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: cover;
+}
+
+.camera-controles {
+  width: 100%;
+  max-width: 640px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 4px 16px max(12px, env(safe-area-inset-bottom));
+}
+
+.camera-controles .erro {
+  margin: 8px 0 0;
+  color: #ff8a80;
+}
+
+.camera-controles .botao {
+  margin-top: 8px;
+}
+
+.camera-opcoes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.camera-opcoes .alternar {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+@media (max-height: 560px) {
+  .camera .dica {
+    display: none;
+  }
+
+  .camera-controles .botao {
+    padding: 12px;
+  }
 }
 
 .quadro {
