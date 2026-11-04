@@ -86,7 +86,7 @@ Atualizado em 04/11/2026. O contexto de cada item está na [documentação do pr
 - [ ] **Montar o conjunto de 30 a 60 fotos** seguindo o `dataset/LEIAME.md`: fotos mandadas pelo WhatsApp com a lista de respostas (o coordenador importa com `poc/importar.py`) ou recortes salvos pelo app. *Grupo.* 57 até agora (29/10). Pedir fotos **de perto** (tabela grande na imagem) e mandadas **como Documento**: as 8 primeiras vieram comprimidas, e bolinha pequena é a maior causa de `?`.
   - [ ] **Testar no celular a foto da galeria** deitada/inclinada e o aviso de lado incerto; medir o tempo no A32.
   - Cobrir: caneta azul/preta, lápis, marcação fraca, rabiscada, borracha, questão em branco, duas marcadas, sombra, luz amarela, foto torta, **tabela de 10 questões**, Android e iPhone.
-- [ ] **Rodar `python poc/avaliar.py` e `npm run avaliar`** e calibrar os limites com dados reais: gap de 0,15 (`?`), 0,6·gap (`*`), pontuação de anel de 4,3 (tabela cortada) e proporção do quadro (`ALTURA_LINHA` em `app/src/Camera.tsx`).
+- [ ] **Rodar `python poc/avaliar.py` e `npm run avaliar`** e calibrar os limites com dados reais: gap de 0,15 (`?`), 0,6·gap (`*`), pontuação de anel de 4,3 (tabela cortada) e proporção do quadro (`ALTURA_LINHA` em `app/src/visor.ts`).
 - [x] **Decidir:** se a precisão não chegar perto de 99%, reavaliar a abordagem (folha própria com marcadores, seção 2.3). **Decidido em 04/11: manter a abordagem** e apresentar o projeto sem a folha própria, que fica como planejamento futuro (Depois do MVP).
 - [x] **Avaliar o código do app, e não só o do Python:** `npm run avaliar` (21/10).
 
@@ -114,7 +114,7 @@ Atualizado em 04/11/2026. O contexto de cada item está na [documentação do pr
 
 ## Semana 4: piloto e entrega
 - [x] **Deploy no GitHub Pages:** https://luizvinycius.github.io/gabarito-livre/ (21/10).
-- [ ] **Testar o app publicado no celular:** conferir se o Safari passa a lembrar a permissão da câmera e se o PWA instala. Com o app no ar, o grupo pode usar o "Salvar recorte" (`#teste`) sem estar no Wi-Fi do coordenador.
+- [x] **Testar o app publicado no celular:** conferir se o Safari passa a lembrar a permissão da câmera e se o PWA instala. **04/11: app instalado e funcionando com e sem internet.** Com o app no ar, o grupo pode usar o "Salvar recorte" (`#teste`) sem estar no Wi-Fi do coordenador.
 - [ ] **Piloto** com o Professor B ou o Professor C numa turma real, medindo o tempo manual contra o tempo no app.
 - [x] **README para usuários:** como usar, como instalar como app, dicas de foto e perguntas frequentes. (21/10)
 - [ ] **Apresentação:** pitch, histórico das entrevistas e demonstração ao vivo.
