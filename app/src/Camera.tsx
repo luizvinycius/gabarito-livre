@@ -19,6 +19,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { type EstadoQuadro, type TentativaQuadro, avaliarQuadro, parada } from './captura'
 import type { Leitura } from './omr/useLeitor'
+import { guardarSom, prepararSom, somLigado } from './som'
 import { LINHAS_CABECALHO, type Tamanho, quadroNoVideo, tamanhoVisor } from './visor'
 
 // Margem extra no recorte, em fração do tamanho do quadro, para tolerar
@@ -61,6 +62,9 @@ type Props = {
   aviso?: string | null
   // com ele, aparece o botão de escolher uma foto da galeria
   onGaleria?: (arquivo: File | undefined) => void
+  // mostra a opção de ligar e desligar o bip da leitura (quem toca o bip
+  // é a tela, quando a leitura fica pronta)
+  comSom?: boolean
   // Escondida, a câmera continua ligada para a próxima folha.
   visivel: boolean
   // Ao abrir para a próxima folha, a captura automática espera a folha
@@ -81,6 +85,7 @@ export default function Camera({
   atalhos,
   aviso,
   onGaleria,
+  comSom = false,
   visivel,
   exigirTroca,
   analisar,
@@ -94,6 +99,7 @@ export default function Camera({
   const [tamanhoArea, setTamanhoArea] = useState<Tamanho>({ w: 0, h: 0 })
   const [erro, setErro] = useState<string | null>(null)
   const [automatico, setAutomatico] = useState(automaticoSalvo)
+  const [som, setSom] = useState(somLigado)
   const [estado, setEstado] = useState<EstadoQuadro>('desligado')
   const [flash, setFlash] = useState(0)
   // a captura automática está liberada (a folha da última captura já saiu)
@@ -229,8 +235,16 @@ export default function Camera({
   }
 
   function capturar() {
+    prepararSom()
     const recorte = recortar()
     if (recorte) entregar(recorte)
+  }
+
+  // o toque na caixa também libera o áudio no iPhone
+  function mudarSom(ligado: boolean) {
+    setSom(ligado)
+    guardarSom(ligado)
+    if (ligado) prepararSom()
   }
 
   // As funções recortar e entregar mudam a cada render; o laço usa sempre
@@ -388,14 +402,29 @@ export default function Camera({
           </button>
         </div>
         <div className="camera-opcoes">
-          <label className="alternar">
-            <input type="checkbox" checked={automatico} onChange={(e) => setAutomatico(e.target.checked)} />
-            Captura automática
-          </label>
+          <div className="camera-alternar">
+            <label className="alternar">
+              <input type="checkbox" checked={automatico} onChange={(e) => setAutomatico(e.target.checked)} />
+              Captura automática
+            </label>
+            {comSom && (
+              <label className="alternar">
+                <input type="checkbox" checked={som} onChange={(e) => mudarSom(e.target.checked)} />
+                Som ao ler a folha
+              </label>
+            )}
+          </div>
           {onGaleria && (
             <label className="chip">
               🖼️ Galeria
-              <input type="file" accept="image/*" onChange={(e) => onGaleria(e.target.files?.[0])} />
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  prepararSom()
+                  onGaleria(e.target.files?.[0])
+                }}
+              />
             </label>
           )}
         </div>

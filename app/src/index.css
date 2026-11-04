@@ -260,6 +260,12 @@ html.camera-aberta body {
   margin-top: 8px;
 }
 
+.camera-alternar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .camera-opcoes .alternar {
   margin: 0;
   font-size: 0.95rem;
