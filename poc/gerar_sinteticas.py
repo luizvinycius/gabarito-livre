@@ -6,7 +6,8 @@ de verdade: sombra, luz amarela, folha torta, perspectiva, folha curvada,
 desfoque, ruído, JPEG forte e a correção em vermelho do professor. Também simula o recorte do
 quadro-guia da câmera com a tabela deslocada ou cortada, e tabelas com
 linhas a mais ou a menos que o gabarito. Os recortes do quadro-guia também
-são feitos a partir da foto real do modelo compacto (dataset/fotos/).
+são feitos a partir da foto real do modelo compacto (dataset/fotos/). Tabelas
+de 8 e 10 questões e, desde 05/11, de 6.
 
 Não substitui as fotos do grupo: serve para conferir, sem esperar fotos, que
 uma mudança no leitor não piorou nada. Tudo sai sempre igual (sementes
@@ -52,6 +53,25 @@ MODELOS = [
     ("compacto8a", 8, 95, dict(estilo={**gf.COMPACTO, "linha": 0.09, "bolinha": 0.05})),
     ("compacto10b", 10, 95, dict(estilo={**gf.COMPACTO, "linha": 0.065, "bolinha": 0.05}, valor="0,5")),
 ]
+
+# Provas de 6 questões (atalho "6" na tela do gabarito, 05/11): os mesmos
+# estilos de tabela. Geradas depois de todas as de 8 e 10, para não mudar as
+# sementes delas.
+MODELOS_6 = [
+    ("classico6", 6, 95, {}),
+    ("compacto6d", 6, 95, dict(estilo=gf.COMPACTO, valor="1,00", dissertativas=["2,00", "2,00"])),
+    ("compacto6a", 6, 95, dict(estilo={**gf.COMPACTO, "linha": 0.09, "bolinha": 0.05})),
+    ("compacto6b", 6, 95, dict(estilo={**gf.COMPACTO, "linha": 0.065, "bolinha": 0.05}, valor="0,5")),
+]
+
+# Modelos com o teste de enquadramento (tabela deslocada e cortada no quadro).
+ENQUADRAMENTO = ("classico8", "compacto8d", "compacto10b", "classico6", "compacto6b")
+
+# Tabela com linhas a mais ou a menos que o gabarito: (modelo, questões do gabarito, condição).
+LINHAS_ERRADAS = [("classico10", 8, "linhas a mais"), ("compacto10", 8, "linhas a mais"),
+                  ("classico8", 10, "linhas a menos"), ("compacto8d", 10, "linhas a menos")]
+LINHAS_ERRADAS_6 = [("classico8", 6, "linhas a mais"), ("compacto8d", 6, "linhas a mais"),
+                    ("classico6", 8, "linhas a menos"), ("compacto6d", 8, "linhas a menos")]
 
 # Cada variação: marcação usada nas questões, efeitos da foto e tipo de imagem.
 # 'recorte' imita o quadro-guia (lido a 800 px); 'perto' e 'longe' são a foto
@@ -337,7 +357,24 @@ def gerar(pasta):
             f.write(dados.tobytes())
         linhas.append([nome, n, esperado, "sintetica", "; ".join(condicoes)])
 
-    for m, (nome_m, n, largura, kw) in enumerate(MODELOS):
+    # 8 e 10 questões, depois 6: cada grupo continua com as sementes que teria
+    # sozinho (m conta os modelos dos dois grupos)
+    gerar_modelos(MODELOS, 0, salvar)
+    gerar_linhas_erradas(LINHAS_ERRADAS, salvar, linhas)
+    gerar_modelos(MODELOS_6, len(MODELOS), salvar)
+    gerar_linhas_erradas(LINHAS_ERRADAS_6, salvar, linhas)
+
+    gerar_recortes_da_foto_real(salvar)
+
+    with open(os.path.join(pasta, "respostas.csv"), "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["arquivo", "n_questoes", "respostas", "celular", "condicao"])
+        w.writerows(linhas)
+    return len(linhas)
+
+
+def gerar_modelos(modelos, m0, salvar):
+    for m, (nome_m, n, largura, kw) in enumerate(modelos, start=m0):
         modelo = "modelo compacto" if "estilo" in kw else "modelo classico"
         base, bolinhas, tabela, linha = desenhar_pagina(n, largura, kw)
 
@@ -362,7 +399,7 @@ def gerar(pasta):
             salvar(arquivo, dados, n, esperado, [modelo, f"{n} questoes"] + op["condicoes"])
 
         # Enquadramento: mesma folha marcada, tabela deslocada no quadro.
-        if nome_m in ("classico8", "compacto8d", "compacto10b"):
+        if nome_m in ENQUADRAMENTO:
             rng = np.random.default_rng(5000 + m)
             img = base.copy()
             esperado = marcar(img, rng, bolinhas, "caneta azul")
@@ -376,10 +413,12 @@ def gerar(pasta):
                        "?" * n if cortada else esperado,
                        [modelo, f"{n} questoes", "caneta azul", "cortada" if cortada else "deslocada"])
 
-    # Linhas a mais ou a menos que o gabarito: o app tem de avisar.
-    for nome_m, n_gab, condicao in [("classico10", 8, "linhas a mais"), ("compacto10", 8, "linhas a mais"),
-                                    ("classico8", 10, "linhas a menos"), ("compacto8d", 10, "linhas a menos")]:
-        _, n, largura, kw = next(md for md in MODELOS if md[0] == nome_m)
+
+def gerar_linhas_erradas(casos, salvar, linhas):
+    """Linhas a mais ou a menos que o gabarito: o app tem de avisar.
+    A semente depende de quantas imagens já foram salvas (linhas)."""
+    for nome_m, n_gab, condicao in casos:
+        _, n, largura, kw = next(md for md in MODELOS + MODELOS_6 if md[0] == nome_m)
         modelo = "modelo compacto" if "estilo" in kw else "modelo classico"
         rng = np.random.default_rng(7000 + n_gab + len(linhas))
         img, bolinhas, tabela, linha = desenhar_pagina(n, largura, kw)
@@ -390,14 +429,6 @@ def gerar(pasta):
         rec = recortar_quadro(img, cantos, n_gab, linha, 0)
         salvar(f"recorte-{nome_m}-gabarito{n_gab}.jpg", acabar(rec, rng, 1400), n_gab, "?" * n_gab,
                [modelo, condicao])
-
-    gerar_recortes_da_foto_real(salvar)
-
-    with open(os.path.join(pasta, "respostas.csv"), "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["arquivo", "n_questoes", "respostas", "celular", "condicao"])
-        w.writerows(linhas)
-    return len(linhas)
 
 
 # Foto real do modelo compacto: posição aproximada da tabela (em pixels da

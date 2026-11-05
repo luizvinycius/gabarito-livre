@@ -189,13 +189,14 @@ Observações:
 - Na foto 2 inteira, a questão 8 saía `C` no Python e `?` no app. A causa não era a decodificação da imagem: o app reduzia a foto passando o tamanho final, e o Python passa o fator de escala, o que arredonda a escala vertical de outro jeito. Corrigido em 21/10; com os mesmos pixels, o `npm run avaliar` (app no Node) e o `poc/avaliar.py` dão hoje o mesmo preenchimento nas 80 bolinhas das 2 fotos. No celular a foto ainda passa pelo canvas antes do worker, então pode haver diferença pequena. A lição: respostas perto do limite mudam com detalhes mínimos do processamento, e o conjunto de fotos precisa medir isso.
 - Marcação muito fraca a lápis fica no limite (`?`).
 - Linhas a mais e a menos que o gabarito: tratadas desde 21/10 (passo 10) e testadas no conjunto sintético.
+- **Tabela de 6 questões, foto de longe com sombra** (05/11, conjunto sintético): a sombra do lado da coluna A apaga a pista do lado da folha (os caminhos mais escuros que `LADO_PAPEL` não contam) e tudo vira `?`, com o aviso de lado incerto. Acontece em parte das fotos de longe de 6 questões e em nenhuma das de 8 e 10. Sem a sombra, as fotos de longe de 6 questões foram lidas certas (5 de 5).
 
 ### 3.7 Conjunto sintético (21/10)
-`poc/gerar_sinteticas.py` gera 101 imagens em `dataset/sinteticas/` (fora do Git; leva ~20 s), sempre iguais:
-- **6 modelos de tabela:** o das fotos de referência com 8 e 10 questões e 4 variações do modelo compacto, inclusive com as linhas de dissertativa;
+`poc/gerar_sinteticas.py` gera 165 imagens em `dataset/sinteticas/` (fora do Git), sempre iguais:
+- **10 modelos de tabela:** o das fotos de referência com 8 e 10 questões e 4 variações do modelo compacto, inclusive com as linhas de dissertativa; desde 05/11, mais 4 com **6 questões** (o modelo das fotos de referência e 3 variações do compacto), gerados depois dos outros para não mudar as sementes das 101 imagens de antes;
 - **11 variações de foto** em cada um: caneta preta e azul, lápis, marcação fraca, rabiscada, borracha, sombra, luz amarela, torta, perspectiva, desfoque, JPEG forte com ruído, correção em vermelho do professor, foto da folha inteira de perto e de longe e, desde 29/10, **folha curvada**: em arco (o meio da tabela ~0,6 linha acima das pontas, como a `r-02`) e com a borda direita enrolada (a coluna E ~0,4 linha abaixo da D, como a `r-07`). Cada folha tem uma questão em branco e uma com duas marcadas;
-- **enquadramento:** o recorte do quadro-guia com a tabela deslocada de −2 a +3 linhas (tem de acertar) e cortada em cima e embaixo (tem de avisar), em 3 modelos e na foto real do modelo compacto;
-- **linhas a mais e a menos** que o gabarito (tem de avisar).
+- **enquadramento:** o recorte do quadro-guia com a tabela deslocada de −2 a +3 linhas (tem de acertar) e cortada em cima e embaixo (tem de avisar), em 5 modelos (2 deles de 6 questões) e na foto real do modelo compacto;
+- **linhas a mais e a menos** que o gabarito (tem de avisar), inclusive tabela de 8 com gabarito de 6 e de 6 com gabarito de 8.
 
 No CSV, `?` na resposta esperada quer dizer "o app tem de pedir confirmação". O workflow `.github/workflows/leitura.yml` gera o conjunto e mede nos dois a cada mudança no leitor; com `--leituras`, cada avaliador grava `arquivo;lido` de cada folha, e o workflow falha se houver erro silencioso ou se as duas leituras diferirem em alguma imagem. Resultado em 21/10, igual no Python e no app: **0 erro silencioso** (antes das mudanças do dia: 19, nas linhas a mais e na foto real cortada em cima), 87% das questões certas e o resto com aviso, quase todo na luz amarela, no lápis fraco com desfoque e nas folhas que têm de avisar. A leitura de cada imagem é idêntica nas duas implementações.
 

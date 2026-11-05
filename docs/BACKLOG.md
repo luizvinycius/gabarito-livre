@@ -1,8 +1,13 @@
 # Backlog
 
-Atualizado em 04/11/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
+Atualizado em 05/11/2026. O contexto de cada item está na [documentação do projeto](DOCUMENTACAO-PROJETO.md); os números entre parênteses apontam para as seções dela.
 
-## Onde paramos (04/11: medido no iPhone e no A32, abordagem mantida, câmera em tela cheia e bip)
+## Onde paramos (05/11: atalho de 6 questões)
+- **Atalho "6" no número de questões** da tela do gabarito, ao lado do 8 e do 10 (6 já podia ser digitado no campo). Conferido no Chromium em tamanho de celular: escolhe 6, monta a tabela com 6 linhas e continua 6 depois de recarregar.
+- **Conjunto sintético com 6 questões (3.7):** 4 modelos novos (clássico e 3 do compacto), com as 11 variações de foto, o enquadramento em 2 deles e tabelas de 8 com gabarito de 6 e de 6 com gabarito de 8. 165 imagens no total; as 101 de antes continuam idênticas (sementes mantidas). **0 erro silencioso**, Python e app leram igual nas 165 (inclusive os valores intermediários), também com as versões do CI. Questões certas: 6 questões 93,1%, 8 questões 94,9%, 10 questões 94,4%.
+- [ ] **Lado da folha incerto na foto de longe com sombra, nas tabelas de 6 questões (3.6).** A foto da folha inteira de longe com sombra do lado da coluna A dá tudo `?` (aviso "tire a foto com a folha em pé", nunca nota errada). No conjunto sintético: `compacto6d-longe`; num teste avulso com outras sementes, 2 de 5 fotos de longe de 6 questões (`classico6`, `compacto6d`), contra 0 de 6 nas de 8 e 10. Causa: os caminhos da pista do lado (`pistaDoLado`) que passam pela sombra ficam mais escuros que o limite do papel (`LADO_PAPEL`) e são descartados, e a pista cai abaixo de `PISTA_MINIMA`. Geradas de novo sem a sombra (mesmas tabelas, outras marcações), as 5 fotos de longe de 6 questões foram lidas certas. Falta entender por que a tabela de 6 linhas é mais afetada que a de 8 e 10.
+
+### Antes (04/11: medido no iPhone e no A32, abordagem mantida, câmera em tela cheia e bip)
 - **Medido no celular, com o código de 30/10 (`ca154a2`)**, no repositório de capturas (`capturas/2026-11-04`, 2 capturas de 10 questões em cada aparelho, a mesma folha lida `BABCDACCEC` nos dois). Medianas, antes (`346ac88`, 29/10) → agora:
   - **iPhone 11:** leitura de um recorte 106 → 95 ms; 1ª rodada do quadro ao vivo 145 → 106 ms; rodadas seguintes 116 → 93 ms. `reduzir` 41 ms, `espera` 5 a 50 ms, OpenCV carregado em 0,75 s.
   - **Galaxy A32:** leitura 357 → 265 ms; 1ª rodada 520 → 336 ms; rodadas seguintes 348 → 278 ms. `reduzir` 133 ms (metade da leitura), `espera` 15 ms, OpenCV em 2,2 s.
