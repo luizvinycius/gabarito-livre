@@ -160,7 +160,7 @@ export default function Gabarito({
         <div className="campo">
           Número de questões
           <div className="atalhos">
-            {[8, 10].map((q) => (
+            {[6, 8, 10].map((q) => (
               <button
                 key={q}
                 className={`chip ${n === q ? 'ativo' : ''}`}
